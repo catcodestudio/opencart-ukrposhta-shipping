@@ -1,0 +1,178 @@
+{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="float-end">
+        <button type="submit" form="form-shipping" data-bs-toggle="tooltip" title="{{ button_save }}" class="btn btn-primary"><i class="fa-solid fa-save"></i></button>
+        <a href="{{ back }}" data-bs-toggle="tooltip" title="{{ button_back }}" class="btn btn-light"><i class="fa-solid fa-reply"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ol class="breadcrumb">
+        {% for breadcrumb in breadcrumbs %}
+          <li class="breadcrumb-item"><a href="{{ breadcrumb.href }}">{{ breadcrumb.text }}</a></li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+  <div class="container-fluid">
+    <div id="alert"></div>
+
+    <div class="alert alert-info d-flex justify-content-between align-items-center">
+      <span>{{ text_setup_hint }}</span>
+      <span>
+        <button type="button" id="button-setup" data-url="{{ setup_url }}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-database"></i> {{ button_setup }}</button>
+        <button type="button" id="button-sync" data-url="{{ sync_regions }}" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-rotate"></i> {{ button_sync_regions }}</button>
+      </span>
+    </div>
+
+    <form id="form-shipping" data-url="{{ save }}">
+      <div class="row">
+        <div class="col-lg-6">
+          <div class="card mb-3">
+            <div class="card-header"><i class="fa-solid fa-key"></i> {{ tab_credentials }}</div>
+            <div class="card-body">
+              <div class="form-check form-switch mb-3">
+                <input type="checkbox" class="form-check-input" id="input-sandbox" name="shipping_ukrposhta_sandbox" value="1" {% if shipping_ukrposhta_sandbox %}checked{% endif %}>
+                <label class="form-check-label" for="input-sandbox">{{ entry_sandbox }}</label>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="input-bearer">{{ entry_bearer }}</label>
+                <input type="password" id="input-bearer" name="shipping_ukrposhta_bearer" placeholder="{% if has_bearer %}••••••••{{ text_saved }}{% else %}{{ entry_bearer_ph }}{% endif %}" class="form-control" autocomplete="off">
+                <div class="form-text">{{ help_bearer }}</div>
+              </div>
+              <button type="button" id="button-test" data-url="{{ test }}" class="btn btn-outline-success btn-sm"><i class="fa-solid fa-plug"></i> {{ button_test }}</button>
+              <span id="test-result" class="ms-2"></span>
+            </div>
+          </div>
+
+          <div class="card mb-3">
+            <div class="card-header"><i class="fa-solid fa-warehouse"></i> {{ tab_sender }}</div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label" for="input-sender-postcode">{{ entry_sender_postcode }}</label>
+                <input type="text" id="input-sender-postcode" name="shipping_ukrposhta_sender_postcode" value="{{ shipping_ukrposhta_sender_postcode }}" placeholder="01001" class="form-control" style="max-width:160px">
+                <div class="form-text">{{ help_sender_postcode }}</div>
+              </div>
+              <button type="button" id="button-quote" data-url="{{ quote_preview }}" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-calculator"></i> {{ button_quote }}</button>
+              <span id="quote-result" class="ms-2"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="card mb-3">
+            <div class="card-header"><i class="fa-solid fa-sliders"></i> {{ tab_behaviour }}</div>
+            <div class="card-body">
+              <div class="form-check form-switch mb-3">
+                <input type="checkbox" class="form-check-input" id="input-status" name="shipping_ukrposhta_status" value="1" {% if shipping_ukrposhta_status %}checked{% endif %}>
+                <label class="form-check-label" for="input-status">{{ entry_status }}</label>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="input-service-type">{{ entry_service_type }}</label>
+                <select id="input-service-type" name="shipping_ukrposhta_service_type" class="form-select">
+                  <option value="STANDARD" {% if shipping_ukrposhta_service_type == 'STANDARD' %}selected{% endif %}>Укрпошта Стандарт</option>
+                  <option value="EXPRESS" {% if shipping_ukrposhta_service_type == 'EXPRESS' %}selected{% endif %}>Укрпошта Express</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="input-default-cost">{{ entry_default_cost }}</label>
+                <input type="text" id="input-default-cost" name="shipping_ukrposhta_default_cost" value="{{ shipping_ukrposhta_default_cost }}" class="form-control" style="max-width:160px">
+                <div class="form-text">{{ help_default_cost }}</div>
+              </div>
+              <div class="row">
+                <div class="col mb-3">
+                  <label class="form-label" for="input-geo-zone">{{ entry_geo_zone }}</label>
+                  <select id="input-geo-zone" name="shipping_ukrposhta_geo_zone_id" class="form-select">
+                    <option value="0">{{ text_all_zones }}</option>
+                    {% for gz in geo_zones %}
+                      <option value="{{ gz.geo_zone_id }}" {% if gz.geo_zone_id == shipping_ukrposhta_geo_zone_id %}selected{% endif %}>{{ gz.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col mb-3">
+                  <label class="form-label" for="input-tax-class">{{ entry_tax_class }}</label>
+                  <select id="input-tax-class" name="shipping_ukrposhta_tax_class_id" class="form-select">
+                    <option value="0">{{ text_none }}</option>
+                    {% for tc in tax_classes %}
+                      <option value="{{ tc.tax_class_id }}" {% if tc.tax_class_id == shipping_ukrposhta_tax_class_id %}selected{% endif %}>{{ tc.title }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col mb-3">
+                  <label class="form-label" for="input-sort-order">{{ entry_sort_order }}</label>
+                  <input type="text" id="input-sort-order" name="shipping_ukrposhta_sort_order" value="{{ shipping_ukrposhta_sort_order }}" class="form-control">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mb-3">
+            <div class="card-header"><i class="fa-solid fa-palette"></i> {{ tab_appearance }}</div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col mb-3">
+                  <label class="form-label" for="input-accent">{{ entry_accent }}</label>
+                  <input type="color" id="input-accent" name="shipping_ukrposhta_accent_color" value="{{ shipping_ukrposhta_accent_color }}" class="form-control form-control-color">
+                </div>
+                <div class="col mb-3">
+                  <label class="form-label" for="input-radius">{{ entry_radius }}</label>
+                  <input type="number" min="0" max="28" id="input-radius" name="shipping_ukrposhta_radius" value="{{ shipping_ukrposhta_radius }}" class="form-control">
+                </div>
+                <div class="col mb-3">
+                  <label class="form-label" for="input-theme">{{ entry_theme }}</label>
+                  <select id="input-theme" name="shipping_ukrposhta_theme" class="form-select">
+                    <option value="auto" {% if shipping_ukrposhta_theme == 'auto' %}selected{% endif %}>{{ text_theme_auto }}</option>
+                    <option value="light" {% if shipping_ukrposhta_theme == 'light' %}selected{% endif %}>{{ text_theme_light }}</option>
+                    <option value="dark" {% if shipping_ukrposhta_theme == 'dark' %}selected{% endif %}>{{ text_theme_dark }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script type="text/javascript">
+(function () {
+  const token = '{{ user_token }}';
+  const post = (url, data) => {
+    const body = new URLSearchParams(data || {});
+    return fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).then(r => r.json());
+  };
+  const alertBox = document.getElementById('alert');
+  const flash = (d) => {
+    alertBox.innerHTML = '<div class="alert alert-' + (d.success ? 'success' : 'danger') + ' alert-dismissible">' +
+      (d.success || d.error) + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+  };
+
+  const form = document.getElementById('form-shipping');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    post(form.dataset.url, new URLSearchParams(new FormData(form))).then(flash).catch(() => flash({ error: 'Network error' }));
+  });
+
+  const wireBtn = (id, resultId, extra) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const r = resultId ? document.getElementById(resultId) : null;
+      if (r) { r.textContent = '...'; r.className = (r.className.split(' ')[0] || '') + ' text-muted'; }
+      post(btn.dataset.url, extra ? extra() : {}).then(d => {
+        if (r) { r.textContent = d.success || d.error; r.className = 'ms-2 ' + (d.success ? 'text-success' : 'text-danger'); }
+        else { flash(d); }
+      }).catch(() => { if (r) { r.textContent = 'Network error'; r.className = 'ms-2 text-danger'; } });
+    });
+  };
+  wireBtn('button-test', 'test-result', () => ({
+    shipping_ukrposhta_bearer: document.getElementById('input-bearer').value.trim(),
+    shipping_ukrposhta_sandbox: document.getElementById('input-sandbox').checked ? 1 : 0,
+  }));
+  wireBtn('button-quote', 'quote-result');
+  wireBtn('button-setup', null);
+  wireBtn('button-sync', null);
+})();
+</script>
+{{ footer }}
