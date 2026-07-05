@@ -1,5 +1,7 @@
 # Ukrposhta Shipping for OpenCart
 
+<p align="center"><img src="docs/cover.png" width="380" alt="Ukrposhta Shipping for OpenCart"></p>
+
 Ukrposhta (Укрпошта) shipping integration for **OpenCart 4.x** — an in-checkout post-office picker backed by the official Ukrposhta Address Classifier, plus live domestic tariff calculation.
 
 > **Scope of this release (1.0.0):** checkout picker + tariff. Shipment (barcode/ТТН) creation, sticker printing and cash-on-delivery are implemented but ship in a later update once verified end-to-end against a live contract.
@@ -33,6 +35,16 @@ upload/            files copied into the OpenCart root (admin/, catalog/, system
 ```
 
 Build the installable archive by zipping the **contents** of `upload/` (so `install.json` sits at the archive root).
+
+## Screenshots
+
+**Checkout — post-office picker (region → city → office)**
+
+![Checkout picker](docs/checkout.png)
+
+**Admin — settings**
+
+![Admin settings](docs/admin.png)
 
 ## Licence
 
