@@ -40,9 +40,13 @@ class Cache {
 		if ($regionId === '' || mb_strlen($q) < 2) {
 			return [];
 		}
-		// Cache-first within the region.
-		$esc = $db->escape(mb_strtolower($q));
-		$rows = $db->query("SELECT city_id, district_id, city_ua FROM `" . DB_PREFIX . "up_cities` WHERE region_id = '" . $db->escape($regionId) . "' AND (LOWER(city_ua) LIKE '" . $esc . "%' OR LOWER(city_ua) LIKE '%" . $esc . "%') ORDER BY (LOWER(city_ua) = '" . $esc . "') DESC, CHAR_LENGTH(city_ua) ASC LIMIT 20")->rows;
+		// Cache-first within the region. Each escape() result must sit inside its
+		// own quotes with nothing else: on the PDO driver escape() returns a bound
+		// placeholder (":0"), so a wildcard appended inside the quotes breaks the
+		// SQL. Wildcards go through escape() as part of the raw value — never
+		// escape an already-escaped string.
+		$lower = mb_strtolower($q);
+		$rows = $db->query("SELECT city_id, district_id, city_ua FROM `" . DB_PREFIX . "up_cities` WHERE region_id = '" . $db->escape($regionId) . "' AND (LOWER(city_ua) LIKE '" . $db->escape($lower . '%') . "' OR LOWER(city_ua) LIKE '" . $db->escape('%' . $lower . '%') . "') ORDER BY (LOWER(city_ua) = '" . $db->escape($lower) . "') DESC, CHAR_LENGTH(city_ua) ASC LIMIT 20")->rows;
 		if ($rows) {
 			return array_map(fn($r) => [
 				'id'          => (string)$r['city_id'],
