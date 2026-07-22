@@ -55,6 +55,6 @@ GPL-3.0-or-later.
 
 Модуль розробляє і підтримує студія **[CatCode](https://catcode.com.ua)**.
 
-- 📄 Сторінка модуля з документацією та ліцензією: **https://catcode.com.ua/modules/ukrposhta-%d0%b2%d0%b8%d0%b1%d1%96%d1%80-%d0%b2%d1%96%d0%b4%d0%b4%d1%96%d0%bb%d0%b5%d0%bd%d0%bd%d1%8f-%d1%82%d0%b0%d1%80%d0%b8%d1%84-%d0%b4%d0%bb%d1%8f-opencart-4-x/**
+- 📄 Сторінка модуля з документацією та ліцензією: **https://catcode.com.ua/modules/ukrposhta-shipping-for-opencart-4/**
 - 🧩 Усі наші модулі для OpenCart та WooCommerce: https://catcode.com.ua/modules/
 - ✉️ Підтримка: catcode.info@gmail.com
