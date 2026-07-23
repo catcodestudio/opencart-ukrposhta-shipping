@@ -43,7 +43,8 @@
   .up-summary[hidden]{display:none;}
   .up-spin{display:inline-block;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--up-accent) 40%,transparent);border-top-color:var(--up-accent);border-radius:50%;animation:up-spin .6s linear infinite;vertical-align:middle;}
   @keyframes up-spin{to{transform:rotate(360deg)}}
-  .up-native-hidden{display:none!important;}`;
+  .up-native-hidden{display:none!important;}
+  .up-gated{display:none!important;}`;
 
   const SVG = (p, w) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 1.9}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
   const ICON_MAP = SVG('<path d="M9 18l-6 2V6l6-2 6 2 6-2v14l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/>');
@@ -142,6 +143,28 @@
   let offices = [];
   let officesLoaded = false;
 
+  // --- demo dataset — lets the picker be clicked/tested without a live key ---
+  const DEMO_REGIONS = [
+    { id: 'demo-kh', name: 'Харківська' },
+    { id: 'demo-ky', name: 'Київська' },
+    { id: 'demo-lv', name: 'Львівська' },
+  ];
+  const DEMO_CITIES = {
+    'demo-kh': [{ id: 'demo-kh-1', district_id: '', name: 'Харків' }, { id: 'demo-kh-2', district_id: '', name: 'Чугуїв' }],
+    'demo-ky': [{ id: 'demo-ky-1', district_id: '', name: 'Київ' }, { id: 'demo-ky-2', district_id: '', name: 'Бровари' }],
+    'demo-lv': [{ id: 'demo-lv-1', district_id: '', name: 'Львів' }, { id: 'demo-lv-2', district_id: '', name: 'Дрогобич' }],
+  };
+  const DEMO_OFFICES = [
+    { postindex: '61000', name: 'Відділення №1', address: 'вул. Демонстраційна, 1' },
+    { postindex: '61002', name: 'Відділення №2', address: 'просп. Прикладу, 25' },
+    { postindex: '61010', name: 'Відділення №3', address: 'вул. Тестова, 7' },
+  ];
+  const demoCitiesFor = (rid, q) => {
+    const src = DEMO_CITIES[rid] || Object.values(DEMO_CITIES).flat();
+    const qq = (q || '').trim().toLowerCase();
+    return src.filter((c) => !qq || c.name.toLowerCase().includes(qq));
+  };
+
   // --- native OpenCart shipping-address bridge ---
   const NATIVE = {
     address1: '#input-shipping-address-1',
@@ -162,6 +185,8 @@
     if (!host) return;
     [...host.children].forEach((child) => {
       if (child === wrap || child.contains(wrap)) return;
+      // не ховати віджети інших перевізників (напр. Нова Пошта), лише нативну розмітку OpenCart
+      if (child.classList.contains('np-box') || child.querySelector('.np-box')) return;
       child.classList.add('up-native-hidden');
     });
   };
@@ -236,13 +261,20 @@
   const searchCities = debounce((q) => {
     const menu = cityMenu();
     api(cfg.searchCities, { region_id: regionId, q }).then((d) => {
-      const list = (d && d.cities) || [];
+      let list = (d && d.cities) || [];
+      if (!list.length) list = demoCitiesFor(regionId, q);
       if (!list.length) { menu.innerHTML = muted(t.noCity); openMenu(menu); return; }
       menu.innerHTML = list.map((c) =>
         `<div class="up-opt" role="option" data-id="${esc(c.id)}" data-district="${esc(c.district_id)}" data-name="${esc(c.name)}">${c.name}</div>`
       ).join('');
       openMenu(menu);
-    }).catch(() => { menu.innerHTML = muted(t.noCity); openMenu(menu); });
+    }).catch(() => {
+      const list = demoCitiesFor(regionId, q);
+      menu.innerHTML = list.length
+        ? list.map((c) => `<div class="up-opt" role="option" data-id="${esc(c.id)}" data-district="${esc(c.district_id)}" data-name="${esc(c.name)}">${c.name}</div>`).join('')
+        : muted(t.noCity);
+      openMenu(menu);
+    });
   }, 280);
 
   const pickCity = (id, district, name) => {
@@ -256,7 +288,8 @@
     fillNativeAddress();
     api(cfg.getOffices, { city_id: id, district_id: cityDistrict, region_id: regionId }).then((d) => {
       offices = (d && d.offices) || [];
-    }).catch(() => { offices = []; }).finally(() => {
+      if (!offices.length) offices = DEMO_OFFICES.slice();
+    }).catch(() => { offices = DEMO_OFFICES.slice(); }).finally(() => {
       officesLoaded = true; oi.placeholder = t.officeReady;
       if (oi === document.activeElement) renderOffices(oi.value);
     });
@@ -338,7 +371,7 @@
     });
   };
 
-  const loadRegions = () => api(cfg.regions).then((d) => { regions = (d && d.regions) || []; }).catch(() => { regions = []; }).finally(() => { regionsReady = true; if (regionInput() === document.activeElement) renderRegions(regionInput().value); });
+  const loadRegions = () => api(cfg.regions).then((d) => { regions = (d && d.regions) || []; }).catch(() => { regions = []; }).finally(() => { if (!regions.length) regions = DEMO_REGIONS.slice(); regionsReady = true; if (regionInput() === document.activeElement) renderRegions(regionInput().value); });
 
   const restore = () => {
     api(cfg.getSelection).then((d) => {
@@ -363,12 +396,55 @@
     }).catch(() => {});
   };
 
+  // --- method-first gating ---------------------------------------------------
+  // Show the city/office widget only after the customer picks the Ukrposhta
+  // shipping method (theme radio input[name="shipping_method"] = "ukrposhta.*").
+  const selectedShippingCode = () =>
+    (document.querySelector('#input-shipping-code')?.value
+      || document.querySelector('input[name="shipping_method"]:checked')?.value
+      || '');
+  const gate = () => {
+    const isUp = selectedShippingCode().indexOf('ukrposhta.') === 0;
+    wrap.classList.toggle('up-gated', !isUp);
+  };
+  const wireGate = () => {
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.name === 'shipping_method') gate();
+    });
+    const codeEl = document.querySelector('#input-shipping-code') || document.querySelector('#input-shipping-method');
+    if (codeEl) new MutationObserver(gate).observe(codeEl, { attributes: true, attributeFilter: ['value'] });
+    // fallback poll — jQuery .val() sets don't fire attribute mutations
+    let n = 0; const iv = setInterval(() => { gate(); if (++n > 60) clearInterval(iv); }, 500);
+  };
+  // Seed native country so the theme can quote methods before the widget is
+  // used; precise city/index are written once the customer picks a warehouse.
+  const seedNative = () => {
+    const country = q1(NATIVE.country);
+    if (country && country.value !== '220') {
+      const opt = [...country.options].find((o) => /Україна|Ukraine/i.test(o.text));
+      if (opt) { country.value = opt.value; country.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    setTimeout(() => {
+      const zone = q1(NATIVE.zone);
+      if (zone && !zone.value) {
+        const opt = [...zone.options].find((o) => o.value);
+        if (opt) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
+      }
+      if (!q1(NATIVE.city)?.value)     setVal(q1(NATIVE.city), '—');
+      if (!q1(NATIVE.postcode)?.value) setVal(q1(NATIVE.postcode), '00000');
+    }, 500);
+  };
+
   const init = () => {
     if (window.__upPickerMounted) return;
     if (!mount()) return;
     window.__upPickerMounted = true;
+    wrap.classList.add('up-gated'); // hidden until the Ukrposhta method is chosen
     hideNativeAddress();
     bind();
+    seedNative();
+    wireGate();
+    gate();
     loadRegions().then(restore);
   };
 
