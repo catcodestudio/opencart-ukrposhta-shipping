@@ -37,7 +37,9 @@ class Cache {
 
 	public static function searchCities($db, Client $client, string $regionId, string $query): array {
 		$q = trim($query);
-		if ($regionId === '' || mb_strlen($q) < 2) {
+		// mb_strlen is the only hot-path multibyte call here; guard it so the
+		// city autocomplete never fatals on a host without the mbstring ext.
+		if ($regionId === '' || (function_exists('mb_strlen') ? mb_strlen($q) : strlen($q)) < 2) {
 			return [];
 		}
 		// Cache-first within the region. Each escape() result must sit inside its
@@ -45,7 +47,7 @@ class Cache {
 		// placeholder (":0"), so a wildcard appended inside the quotes breaks the
 		// SQL. Wildcards go through escape() as part of the raw value — never
 		// escape an already-escaped string.
-		$lower = mb_strtolower($q);
+		$lower = function_exists('mb_strtolower') ? mb_strtolower($q) : strtolower($q);
 		$rows = $db->query("SELECT city_id, district_id, city_ua FROM `" . DB_PREFIX . "up_cities` WHERE region_id = '" . $db->escape($regionId) . "' AND (LOWER(city_ua) LIKE '" . $db->escape($lower . '%') . "' OR LOWER(city_ua) LIKE '" . $db->escape('%' . $lower . '%') . "') ORDER BY (LOWER(city_ua) = '" . $db->escape($lower) . "') DESC, CHAR_LENGTH(city_ua) ASC LIMIT 20")->rows;
 		if ($rows) {
 			return array_map(fn($r) => [
