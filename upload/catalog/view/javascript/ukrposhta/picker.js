@@ -461,11 +461,16 @@
       || '');
   const gate = () => {
     const isUp = selectedShippingCode().indexOf('ukrposhta.') === 0;
+    const _wasHidden = wrap.classList.contains('up-gated');
     wrap.classList.toggle('up-gated', !isUp);
+    // Widget appeared for our carrier — on mobile it renders above the
+    // method selector, so scroll it into view instead of leaving the
+    // customer to hunt for it (only after a real pick, not initial render).
+    if (isUp && _wasHidden && window.__ccMethodPicked) setTimeout(function () { try { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }, 350);
   };
   const wireGate = () => {
     document.addEventListener('change', (e) => {
-      if (e.target && e.target.name === 'shipping_method') gate();
+      if (e.target && e.target.name === 'shipping_method') { window.__ccMethodPicked = true; gate(); }
     });
     const codeEl = document.querySelector('#input-shipping-code') || document.querySelector('#input-shipping-method');
     if (codeEl) new MutationObserver(gate).observe(codeEl, { attributes: true, attributeFilter: ['value'] });
