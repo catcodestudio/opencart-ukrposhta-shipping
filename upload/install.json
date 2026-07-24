@@ -1,7 +1,7 @@
 {
   "name": "Ukrposhta Shipping",
   "description": "Ukrposhta (Укрпошта) shipping for OpenCart 4.x — region/city/post-office picker at checkout via the official Address Classifier, live domestic tariff quotes, geo-zone + tax rules, encrypted API key. Shipment (TTN) creation ships in a later update.",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "author": "CatCode",
   "link": "https://catcode.com.ua/opencart/ukrposhta"
 }

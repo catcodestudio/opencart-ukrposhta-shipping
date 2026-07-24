@@ -180,6 +180,20 @@
     elm.dispatchEvent(new Event('input',  { bubbles: true }));
     elm.dispatchEvent(new Event('change', { bubbles: true }));
   };
+  // Cyrillic → Latin (national standard) so a Ukrainian oblast name can be
+  // compared against a transliterated OpenCart zone list.
+  const TRANSLIT = { 'а':'a','б':'b','в':'v','г':'h','ґ':'g','д':'d','е':'e','є':'ie','ж':'zh','з':'z','и':'y','і':'i','ї':'i','й':'i','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ь':'','ю':'iu','я':'ia',"'":'','’':'' };
+  const translit = (s) => (s || '').toLowerCase().split('').map((ch) => (ch in TRANSLIT ? TRANSLIT[ch] : ch)).join('');
+  const normLat = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const matchZone = (zoneSel, area) => {
+    const key = normLat(translit((area || '').replace(/\s*(область|обл\.?|oblast'?|м\.)\s*/gi, '')));
+    if (!key) return null;
+    const opts = [...zoneSel.options].filter((o) => o.value);
+    return opts.find((o) => normLat(o.text).indexOf(key) === 0)
+        || opts.find((o) => key.indexOf(normLat(o.text)) === 0)
+        || null;
+  };
+
   const hideNativeAddress = () => {
     const host = document.querySelector('#shipping-address');
     if (!host) return;
@@ -198,8 +212,12 @@
     }
     const zone = q1(NATIVE.zone);
     if (zone) {
-      let opt = regionName && [...zone.options].find((o) => o.value && o.text.includes(regionName.replace(/\s*обл.*/i, '')));
-      if (!opt) opt = [...zone.options].find((o) => o.value);
+      // Zone lists are often transliterated (e.g. "Kharkivs'ka Oblast'"), so a
+      // raw Cyrillic compare against regionName never hits and the old code fell
+      // back to the FIRST option — always "Avtonomna Respublika Krym".
+      // Transliterate the region and match on the normalized prefix; only touch
+      // the zone on a real match, never force a wrong first option.
+      const opt = matchZone(zone, regionName);
       if (opt && zone.value !== opt.value) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
     }
     setVal(q1(NATIVE.city),     cityName || 'Україна');

@@ -98,7 +98,7 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 		$this->model_setting_event->addEvent([
 			'code'        => 'ukrposhta_order_added',
 			'description' => 'Ukrposhta — capture office selection on order create',
-			'trigger'     => 'catalog/model/checkout/order.addOrder/after',
+			'trigger'     => 'catalog/model/checkout/order*addOrder/after',
 			'action'      => 'extension/ukrposhta/events.orderAdded',
 			'status'      => 1,
 			'sort_order'  => 10,
