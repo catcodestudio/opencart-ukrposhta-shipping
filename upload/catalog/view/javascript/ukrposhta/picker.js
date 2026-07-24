@@ -143,27 +143,17 @@
   let offices = [];
   let officesLoaded = false;
 
-  // --- demo dataset — lets the picker be clicked/tested without a live key ---
-  const DEMO_REGIONS = [
-    { id: 'demo-kh', name: 'Харківська' },
-    { id: 'demo-ky', name: 'Київська' },
-    { id: 'demo-lv', name: 'Львівська' },
-  ];
-  const DEMO_CITIES = {
-    'demo-kh': [{ id: 'demo-kh-1', district_id: '', name: 'Харків' }, { id: 'demo-kh-2', district_id: '', name: 'Чугуїв' }],
-    'demo-ky': [{ id: 'demo-ky-1', district_id: '', name: 'Київ' }, { id: 'demo-ky-2', district_id: '', name: 'Бровари' }],
-    'demo-lv': [{ id: 'demo-lv-1', district_id: '', name: 'Львів' }, { id: 'demo-lv-2', district_id: '', name: 'Дрогобич' }],
-  };
-  const DEMO_OFFICES = [
-    { postindex: '61000', name: 'Відділення №1', address: 'вул. Демонстраційна, 1' },
-    { postindex: '61002', name: 'Відділення №2', address: 'просп. Прикладу, 25' },
-    { postindex: '61010', name: 'Відділення №3', address: 'вул. Тестова, 7' },
-  ];
-  const demoCitiesFor = (rid, q) => {
-    const src = DEMO_CITIES[rid] || Object.values(DEMO_CITIES).flat();
-    const qq = (q || '').trim().toLowerCase();
-    return src.filter((c) => !qq || c.name.toLowerCase().includes(qq));
-  };
+  // --- offline fallback ------------------------------------------------------
+  // Regions are static reality — a full oblast list keeps the picker usable
+  // when the Ukrposhta API key is missing/unreachable. Cities and offices are
+  // NOT faked: without live data the customer types their city and 5-digit
+  // branch index manually (an index fully identifies an Ukrposhta branch).
+  const STATIC_REGIONS = [
+    'Вінницька', 'Волинська', 'Дніпропетровська', 'Донецька', 'Житомирська', 'Закарпатська',
+    'Запорізька', 'Івано-Франківська', 'Київська', 'Кіровоградська', 'Луганська', 'Львівська',
+    'Миколаївська', 'Одеська', 'Полтавська', 'Рівненська', 'Сумська', 'Тернопільська',
+    'Харківська', 'Херсонська', 'Хмельницька', 'Черкаська', 'Чернівецька', 'Чернігівська', 'м. Київ',
+  ].map((name, i) => ({ id: 'static-' + i, name }));
 
   // --- native OpenCart shipping-address bridge ---
   const NATIVE = {
@@ -204,7 +194,41 @@
       child.classList.add('up-native-hidden');
     });
   };
+  // Client stores may add REQUIRED custom address fields (e.g. a legacy
+  // carrier text field). They live inside the hidden native address area, so
+  // an unfilled one would fail register.save with an error the customer can't
+  // see. Keep every empty text-like custom field satisfied; overwrite only
+  // values we wrote ourselves (ccAutofill marker), never the customer's.
+  const fillCustomFields = (text) => {
+    const groups = {};
+    document.querySelectorAll('#shipping-address input[name^="shipping_custom_field"], #shipping-address textarea[name^="shipping_custom_field"], #shipping-address select[name^="shipping_custom_field"]').forEach((el) => {
+      if (wrap.contains(el)) return;
+      const type = (el.type || '').toLowerCase();
+      if (type === 'hidden') return;
+      if (type === 'radio' || type === 'checkbox') {
+        (groups[el.name] = groups[el.name] || []).push(el);
+      } else if (el.tagName === 'SELECT') {
+        if (!el.value) {
+          const opt = [...el.options].find((o) => o.value);
+          if (opt) { el.value = opt.value; el.dispatchEvent(new Event('change', { bubbles: true })); }
+        }
+      } else if (!(el.value || '').trim() || el.dataset.ccAutofill === '1') {
+        setVal(el, text); el.dataset.ccAutofill = '1';
+      }
+    });
+    // Required radio/checkbox groups hidden with the native form: default to the
+    // first option so validation passes (the real branch comes from the picker).
+    Object.values(groups).forEach((els) => {
+      if (!els.some((e) => e.checked)) { els[0].checked = true; els[0].dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+  };
+
   const fillNativeAddress = () => {
+    // Only the *selected* carrier may write the shared native address fields.
+    // Both pickers coexist on the checkout; this widget's late restore()/fill
+    // would otherwise stomp a Nova Poshta choice with "Укрпошта"/first-zone
+    // (AR Krym) defaults. No-op unless the Ukrposhta method is chosen.
+    if (selectedShippingCode().indexOf('ukrposhta.') !== 0) return;
     const country = q1(NATIVE.country);
     if (country && country.value !== '220') {
       const opt = [...country.options].find((o) => /Україна|Ukraine/i.test(o.text));
@@ -223,6 +247,9 @@
     setVal(q1(NATIVE.city),     cityName || 'Україна');
     setVal(q1(NATIVE.address1), officeHidden().dataset.name || 'Укрпошта');
     setVal(q1(NATIVE.postcode), officeHidden().value || '00000');
+    const offName = officeHidden().dataset.name || '';
+    const offPi = officeHidden().value || '';
+    fillCustomFields(offName ? `${cityName}, ${offName} (${offPi})` : (cityName || 'Відділення перевізника'));
   };
 
   const regionInput = () => wrap.querySelector('#up-region-q');
@@ -276,21 +303,21 @@
   };
 
   // --- city autocomplete (needs region) ---
+  // When the classifier has no data (no API key / API down) let the customer
+  // use exactly what they typed as the city — never invent a fake list.
+  const manualCityOpt = (q) =>
+    `<div class="up-opt" role="option" data-id="manual" data-district="" data-name="${esc(q)}">Використати: «${esc(q)}»</div>`;
   const searchCities = debounce((q) => {
     const menu = cityMenu();
     api(cfg.searchCities, { region_id: regionId, q }).then((d) => {
-      let list = (d && d.cities) || [];
-      if (!list.length) list = demoCitiesFor(regionId, q);
-      if (!list.length) { menu.innerHTML = muted(t.noCity); openMenu(menu); return; }
+      const list = (d && d.cities) || [];
+      if (!list.length) { menu.innerHTML = q.trim().length >= 2 ? manualCityOpt(q.trim()) : muted(t.noCity); openMenu(menu); return; }
       menu.innerHTML = list.map((c) =>
         `<div class="up-opt" role="option" data-id="${esc(c.id)}" data-district="${esc(c.district_id)}" data-name="${esc(c.name)}">${c.name}</div>`
       ).join('');
       openMenu(menu);
     }).catch(() => {
-      const list = demoCitiesFor(regionId, q);
-      menu.innerHTML = list.length
-        ? list.map((c) => `<div class="up-opt" role="option" data-id="${esc(c.id)}" data-district="${esc(c.district_id)}" data-name="${esc(c.name)}">${c.name}</div>`).join('')
-        : muted(t.noCity);
+      menu.innerHTML = q.trim().length >= 2 ? manualCityOpt(q.trim()) : muted(t.noCity);
       openMenu(menu);
     });
   }, 280);
@@ -306,9 +333,11 @@
     fillNativeAddress();
     api(cfg.getOffices, { city_id: id, district_id: cityDistrict, region_id: regionId }).then((d) => {
       offices = (d && d.offices) || [];
-      if (!offices.length) offices = DEMO_OFFICES.slice();
-    }).catch(() => { offices = DEMO_OFFICES.slice(); }).finally(() => {
-      officesLoaded = true; oi.placeholder = t.officeReady;
+    }).catch(() => { offices = []; }).finally(() => {
+      officesLoaded = true;
+      // No live office list (no API key / manual city) — the customer enters
+      // the 5-digit branch index instead; never show fake demo branches.
+      oi.placeholder = offices.length ? t.officeReady : 'Введіть 5-значний індекс відділення…';
       if (oi === document.activeElement) renderOffices(oi.value);
     });
   };
@@ -318,7 +347,16 @@
     const menu = officeMenu();
     const f = (filter || '').trim().toLowerCase();
     const list = f ? offices.filter((o) => (o.name + ' ' + o.postindex + ' ' + o.address).toLowerCase().includes(f)) : offices;
-    if (!offices.length) { menu.innerHTML = muted(officesLoaded ? t.noOffice : t.loading); openMenu(menu); return; }
+    if (!offices.length) {
+      if (officesLoaded && /^\d{5}$/.test(f)) {
+        // Manual entry path: a bare postindex fully identifies the branch.
+        menu.innerHTML = `<div class="up-opt" role="option" data-pi="${esc(f)}" data-name="Відділення Укрпошти"><span class="up-opt--pin">${esc(f)}</span>Відділення за індексом ${esc(f)}</div>`;
+      } else {
+        menu.innerHTML = muted(officesLoaded ? 'Введіть 5-значний поштовий індекс відділення' : t.loading);
+      }
+      openMenu(menu);
+      return;
+    }
     if (!list.length) { menu.innerHTML = muted(t.noOffice); openMenu(menu); return; }
     menu.innerHTML = list.slice(0, 80).map((o) =>
       `<div class="up-opt" role="option" data-pi="${esc(o.postindex)}" data-name="${esc(o.name)}"><span class="up-opt--pin">${o.postindex}</span>${o.name}${o.address ? `<small>${o.address}</small>` : ''}</div>`
@@ -333,7 +371,7 @@
     closeMenu(officeMenu());
     renderSummary();
     fillNativeAddress();
-    api(cfg.setSelection, { region_id: regionId, city_id: cityId, city_name: cityName, office_postindex: pi, office_name: name });
+    api(cfg.setSelection, { region_id: regionId, region_name: regionName, city_id: cityId, city_name: cityName, office_postindex: pi, office_name: name });
   };
 
   const keyNav = (menu, e) => {
@@ -389,12 +427,12 @@
     });
   };
 
-  const loadRegions = () => api(cfg.regions).then((d) => { regions = (d && d.regions) || []; }).catch(() => { regions = []; }).finally(() => { if (!regions.length) regions = DEMO_REGIONS.slice(); regionsReady = true; if (regionInput() === document.activeElement) renderRegions(regionInput().value); });
+  const loadRegions = () => api(cfg.regions).then((d) => { regions = (d && d.regions) || []; }).catch(() => { regions = []; }).finally(() => { if (!regions.length) regions = STATIC_REGIONS.slice(); regionsReady = true; if (regionInput() === document.activeElement) renderRegions(regionInput().value); });
 
   const restore = () => {
     api(cfg.getSelection).then((d) => {
       if (!d) return;
-      if (d.region_id) { regionId = d.region_id; }
+      if (d.region_id) { regionId = d.region_id; regionName = d.region_name || regionName; if (regionName) regionInput().value = regionName; }
       if (d.city_id && d.city_name) {
         cityId = d.city_id; cityName = d.city_name;
         cityInput().disabled = false; cityInput().value = cityName; cityInput().placeholder = t.cityReady;
@@ -408,7 +446,7 @@
           api(cfg.getOffices, { city_id: cityId, region_id: regionId }).then((r) => { offices = (r && r.offices) || []; });
         }
         renderSummary();
-        api(cfg.setSelection, { region_id: regionId, city_id: cityId, city_name: cityName, office_postindex: d.office_postindex, office_name: d.office_name || '' });
+        api(cfg.setSelection, { region_id: regionId, region_name: regionName, city_id: cityId, city_name: cityName, office_postindex: d.office_postindex, office_name: d.office_name || '' });
       }
       fillNativeAddress();
     }).catch(() => {});
@@ -434,6 +472,48 @@
     // fallback poll — jQuery .val() sets don't fire attribute mutations
     let n = 0; const iv = setInterval(() => { gate(); if (++n > 60) clearInterval(iv); }, 500);
   };
+  // --- contacts-first confirm gate ------------------------------------------
+  // The module seeds an empty guest customer server-side so shipping methods
+  // can be quoted before «Зберегти дані» (method-first UX). Flip side: the
+  // core confirm step no longer blocks on missing contact data, so keep the
+  // confirm button disabled until the theme reports a successful
+  // register.save — an anonymous order can't be placed through the UI.
+  const wireConfirmGate = () => {
+    window.__ccGatePredicates = window.__ccGatePredicates || [];
+    // This module's predicate: while OUR shipping method is selected, an
+    // office must actually be picked — otherwise the order would ship to the
+    // seeded placeholder (city «Україна», first zone) instead of a branch.
+    window.__ccGatePredicates.push(() =>
+      selectedShippingCode().indexOf('ukrposhta.') !== 0 || !!officeHidden().value);
+    if (window.__ccConfirmGateWired) return; // shared machinery already wired by the other carrier
+    if (!window.jQuery) return; // can't detect the theme's save — keep stock behaviour
+    window.__ccConfirmGateWired = true;
+    const contactsForm = document.querySelector('#checkout-register, #form-register');
+    if (contactsForm) {
+      // Contacts already in the session from an earlier save (page reload) are
+      // pre-filled by the theme — no need to force a second save.
+      if ((document.querySelector('#input-firstname')?.value || '').trim()) window.__ccContactsSaved = true;
+      window.__ccGatePredicates.push(() => !!window.__ccContactsSaved);
+      window.jQuery(document).ajaxSuccess((e, xhr, settings) => {
+        if (((settings && settings.url) || '').indexOf('register.save') === -1) return;
+        try { if ((JSON.parse(xhr.responseText) || {}).success) window.__ccContactsSaved = true; } catch (err) { /* not json */ }
+        if (window.__ccGateRefresh) window.__ccGateRefresh();
+      });
+    }
+    const refresh = () => {
+      const ok = (window.__ccGatePredicates || []).every((p) => { try { return p(); } catch (err) { return true; } });
+      document.querySelectorAll('#checkout-confirm button').forEach((b) => {
+        if (!ok && !b.disabled) { b.disabled = true; b.dataset.ccGated = '1'; b.title = 'Оберіть відділення доставки та збережіть контактні дані'; }
+        if (ok && b.dataset.ccGated) { b.disabled = false; delete b.dataset.ccGated; b.removeAttribute('title'); }
+      });
+    };
+    window.__ccGateRefresh = refresh;
+    const host = document.querySelector('#checkout-confirm');
+    if (host) new MutationObserver(refresh).observe(host, { childList: true, subtree: true });
+    setInterval(refresh, 1200); // safety net for picker/method changes with no DOM event
+    refresh();
+  };
+
   // Seed native country so the theme can quote methods before the widget is
   // used; precise city/index are written once the customer picks a warehouse.
   const seedNative = () => {
@@ -448,8 +528,13 @@
         const opt = [...zone.options].find((o) => o.value);
         if (opt) { zone.value = opt.value; zone.dispatchEvent(new Event('change', { bubbles: true })); }
       }
-      if (!q1(NATIVE.city)?.value)     setVal(q1(NATIVE.city), '—');
+      // Placeholders must PASS core register.save validation (city 2–128,
+      // address_1 3–128 chars) — a bare '—' made the hidden form unsaveable
+      // and the customer saw nothing happen on «Зберегти дані».
+      if (!q1(NATIVE.city)?.value)     setVal(q1(NATIVE.city), 'Україна');
+      if (!q1(NATIVE.address1)?.value) setVal(q1(NATIVE.address1), 'Відділення перевізника');
       if (!q1(NATIVE.postcode)?.value) setVal(q1(NATIVE.postcode), '00000');
+      fillCustomFields('Відділення перевізника');
     }, 500);
   };
 
@@ -458,10 +543,16 @@
     if (!mount()) return;
     window.__upPickerMounted = true;
     wrap.classList.add('up-gated'); // hidden until the Ukrposhta method is chosen
+    // The page was rendered before the module's server-side address seed ran,
+    // so the core printed «Потрібна адреса доставки!» under the method field.
+    // The session is seeded by now — drop the stale error so it doesn't scare
+    // the customer off clicking the method button (which now works).
+    document.querySelector('#error-shipping-method')?.classList.remove('d-block');
     hideNativeAddress();
     bind();
     seedNative();
     wireGate();
+    wireConfirmGate();
     gate();
     loadRegions().then(restore);
   };

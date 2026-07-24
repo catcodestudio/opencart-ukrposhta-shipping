@@ -92,13 +92,25 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 		$this->load->model('setting/event');
-		foreach (['ukrposhta_order_added', 'ukrposhta_order_history_added', 'ukrposhta_footer_inject'] as $code) {
+		foreach (['ukrposhta_order_added', 'ukrposhta_order_added_slash', 'ukrposhta_order_history_added', 'ukrposhta_footer_inject'] as $code) {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
+		// OC4 strips the `catalog/` prefix (startup/event.php) and the model-event
+		// method separator differs by minor version — OC 4.1.x uses a DOT
+		// (`order.addOrder`), OC 4.0.2.x uses a SLASH (`order/addOrder`); a
+		// non-matching trigger fires nothing silently. Register both variants.
 		$this->model_setting_event->addEvent([
 			'code'        => 'ukrposhta_order_added',
-			'description' => 'Ukrposhta — capture office selection on order create',
-			'trigger'     => 'catalog/model/checkout/order*addOrder/after',
+			'description' => 'Ukrposhta — capture office selection on order create (OC 4.1.x dot separator)',
+			'trigger'     => 'catalog/model/checkout/order.addOrder/after',
+			'action'      => 'extension/ukrposhta/events.orderAdded',
+			'status'      => 1,
+			'sort_order'  => 10,
+		]);
+		$this->model_setting_event->addEvent([
+			'code'        => 'ukrposhta_order_added_slash',
+			'description' => 'Ukrposhta — capture office selection on order create (OC 4.0.2.x slash separator)',
+			'trigger'     => 'catalog/model/checkout/order/addOrder/after',
 			'action'      => 'extension/ukrposhta/events.orderAdded',
 			'status'      => 1,
 			'sort_order'  => 10,
@@ -129,7 +141,7 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 
 	public function uninstall(): void {
 		$this->load->model('setting/event');
-		foreach (['ukrposhta_order_added', 'ukrposhta_order_history_added', 'ukrposhta_footer_inject'] as $code) {
+		foreach (['ukrposhta_order_added', 'ukrposhta_order_added_slash', 'ukrposhta_order_history_added', 'ukrposhta_footer_inject'] as $code) {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
 		$this->load->model('setting/cron');
