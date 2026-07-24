@@ -88,7 +88,8 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		if (!$country) {
 			return;
 		}
-		$zone   = $this->matchZone((int)$country['country_id'], (string)($this->session->data['up_region_name'] ?? ''));
+		$region = (string)($this->session->data['up_region_name'] ?? '');
+		$zone   = $this->matchZone((int)$country['country_id'], $region);
 		$office = (string)($this->session->data['up_office_name'] ?? '');
 		$index  = (string)($this->session->data['up_office_postindex'] ?? '');
 		$prev   = (array)($this->session->data['shipping_address'] ?? []);
@@ -102,7 +103,10 @@ class Checkout extends \Opencart\System\Engine\Controller {
 			'city'           => $city,
 			'postcode'       => $index,
 			'zone_id'        => $zone ? (int)$zone['zone_id'] : (int)($prev['zone_id'] ?? 0),
-			'zone'           => $zone ? (string)$zone['name'] : (string)($prev['zone'] ?? ''),
+			// Display the region exactly as the customer picked it (Cyrillic),
+			// not the store's often-transliterated zone dictionary entry; zone_id
+			// still carries the matched store zone for geo/tax logic.
+			'zone'           => $region !== '' ? $region : ($zone ? (string)$zone['name'] : (string)($prev['zone'] ?? '')),
 			'zone_code'      => $zone ? (string)$zone['code'] : (string)($prev['zone_code'] ?? ''),
 			'country_id'     => (int)$country['country_id'],
 			'country'        => (string)($country['name'] ?? 'Ukraine'),

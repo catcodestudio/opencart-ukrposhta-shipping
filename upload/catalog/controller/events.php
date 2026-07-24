@@ -120,12 +120,33 @@ class Events extends \Opencart\System\Engine\Controller {
 		if ($order_id <= 0) {
 			return;
 		}
+		// Only act on orders actually shipped by this carrier — a stale UP
+		// selection in the session must not attach drafts to Nova Poshta orders.
+		$method = (string)($this->session->data['shipping_method']['code'] ?? '');
+		if (strpos($method, 'ukrposhta.') !== 0) {
+			return;
+		}
 		$postindex = (string)($this->session->data['up_office_postindex'] ?? '');
 		if ($postindex === '') {
 			return; // Different shipping method chosen.
 		}
 		$cityName   = (string)($this->session->data['up_city_name'] ?? '');
 		$officeName = (string)($this->session->data['up_office_name'] ?? '');
+		// The order address must carry OUR data verbatim: classifier city, the
+		// region as the customer picked it (Cyrillic) and the REAL branch index —
+		// never a placeholder the hidden native form may have frozen in.
+		$region = (string)($this->session->data['up_region_name'] ?? '');
+		$sets = ["shipping_postcode = '" . $this->db->escape($postindex) . "'"];
+		if ($cityName !== '') {
+			$sets[] = "shipping_city = '" . $this->db->escape($cityName) . "'";
+		}
+		if ($officeName !== '') {
+			$sets[] = "shipping_address_1 = '" . $this->db->escape($officeName) . "'";
+		}
+		if ($region !== '') {
+			$sets[] = "shipping_zone = '" . $this->db->escape($region) . "'";
+		}
+		$this->db->query("UPDATE `" . DB_PREFIX . "order` SET " . implode(', ', $sets) . " WHERE order_id = " . $order_id);
 		$this->db->query("INSERT INTO `" . DB_PREFIX . "up_shipment` SET
 			order_id = " . $order_id . ",
 			recipient_postindex = '" . $this->db->escape($postindex) . "',
