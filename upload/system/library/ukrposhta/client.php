@@ -1,6 +1,10 @@
 <?php
 namespace Opencart\System\Library\Ukrposhta;
 
+// ⚠ str_contains() lives in the GLOBAL namespace, so the polyfill cannot be
+// inlined in this file — it would land in this namespace instead. It is pulled
+// in right after the namespace line, before anything calls it.
+require_once __DIR__ . '/polyfill.php';
 require_once __DIR__ . '/translit.php';
 
 /**

@@ -1,6 +1,8 @@
 <?php
 namespace Opencart\System\Library\Ukrposhta;
 
+require_once __DIR__ . '/polyfill.php';
+
 /**
  * At-rest obfuscation for stored secrets (Bearer, token, license key).
  * NOT cryptographic-grade — defense in depth against casual DB-dump leaks.

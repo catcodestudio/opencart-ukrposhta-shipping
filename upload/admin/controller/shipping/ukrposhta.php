@@ -92,25 +92,27 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 		$this->load->model('setting/event');
+		// `ukrposhta_order_added_slash` is not registered any more — it is listed
+		// so an upgrade from 1.0.12 removes the row that build left behind.
 		foreach (['ukrposhta_order_added', 'ukrposhta_order_added_slash', 'ukrposhta_order_history_added', 'ukrposhta_footer_inject'] as $code) {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
-		// OC4 strips the `catalog/` prefix (startup/event.php) and the model-event
-		// method separator differs by minor version — OC 4.1.x uses a DOT
-		// (`order.addOrder`), OC 4.0.2.x uses a SLASH (`order/addOrder`); a
-		// non-matching trigger fires nothing silently. Register both variants.
+		// OC4 strips the `catalog/` prefix (startup/event.php), and the model-event
+		// method separator differs by minor version — OC 4.1.x builds
+		// `order.addOrder`, OC 4.0.2.x builds `order/addOrder` (see the proxy in
+		// system/engine/loader.php). A trigger with the wrong separator fires
+		// nothing, silently.
+		//
+		// ONE row covers both: Event::trigger() turns `*` into `.*` and matches
+		// the trigger as a regex, so the wildcard spans either separator. The
+		// previous build registered the dot and the slash as two separate events
+		// instead — which also works, but leaves a second row that has to stay in
+		// sync and would double-fire the handler if a future build ever matched
+		// both.
 		$this->model_setting_event->addEvent([
 			'code'        => 'ukrposhta_order_added',
-			'description' => 'Ukrposhta — capture office selection on order create (OC 4.1.x dot separator)',
-			'trigger'     => 'catalog/model/checkout/order.addOrder/after',
-			'action'      => 'extension/ukrposhta/events.orderAdded',
-			'status'      => 1,
-			'sort_order'  => 10,
-		]);
-		$this->model_setting_event->addEvent([
-			'code'        => 'ukrposhta_order_added_slash',
-			'description' => 'Ukrposhta — capture office selection on order create (OC 4.0.2.x slash separator)',
-			'trigger'     => 'catalog/model/checkout/order/addOrder/after',
+			'description' => 'Ukrposhta — capture office selection on order create',
+			'trigger'     => 'catalog/model/checkout/order*addOrder/after',
 			'action'      => 'extension/ukrposhta/events.orderAdded',
 			'status'      => 1,
 			'sort_order'  => 10,

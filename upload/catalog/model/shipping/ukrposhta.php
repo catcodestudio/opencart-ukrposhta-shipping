@@ -87,10 +87,10 @@ class Ukrposhta extends \Opencart\System\Engine\Model {
 			$unit = (int)$this->config->get('config_weight_class_id');
 			$info = $this->model_localisation_weight_class->getWeightClass($unit);
 			$title = strtolower((string)($info['unit'] ?? ($info['title'] ?? '')));
-			$grams = match (true) {
-				str_contains($title, 'g') || str_contains($title, 'г') => $w,        // already grams
-				default => $w * 1000,                                                // kg → g
-			};
+			// Already grams, or kilograms that need scaling. Written as an if
+			// rather than match() so the file still parses on PHP 7.4.
+			$is_grams = (strpos($title, 'g') !== false) || (strpos($title, 'г') !== false);
+			$grams = $is_grams ? $w : $w * 1000;
 			return (int)max(round($grams), 1);
 		} catch (\Throwable $e) {
 			return 1000;
