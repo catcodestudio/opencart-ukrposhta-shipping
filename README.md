@@ -57,4 +57,4 @@ GPL-3.0-or-later.
 
 - 📄 Сторінка модуля з документацією та ліцензією: **https://catcode.com.ua/modules/ukrposhta-shipping-for-opencart-4/**
 - 🧩 Усі наші модулі для OpenCart та WooCommerce: https://catcode.com.ua/modules/
-- ✉️ Підтримка: catcode.info@gmail.com
+- ✉️ Підтримка: info@catcode.com.ua
