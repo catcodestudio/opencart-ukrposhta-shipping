@@ -191,6 +191,19 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 		// Secret shown masked (present/absent), never round-tripped in plaintext.
 		$data['has_bearer'] = $this->secret('shipping_ukrposhta_bearer') !== '';
 
+		// The "first run — press Install" hint must disappear once the tables
+		// exist, otherwise every settings screen tells the shop to install an
+		// extension that is already running.
+		$installed = (bool)$this->db->query("SHOW TABLES LIKE '" . DB_PREFIX . "up_regions'")->num_rows;
+		$regions   = 0;
+		if ($installed) {
+			$regions = (int)$this->db->query("SELECT COUNT(*) AS total FROM `" . DB_PREFIX . "up_regions`")->row['total'];
+		}
+		$data['is_setup']        = $installed;
+		$data['text_setup_done'] = $regions
+			? sprintf($this->language->get('text_setup_done'), $regions)
+			: $this->language->get('text_setup_offline');
+
 		$fields = [
 			'shipping_ukrposhta_sandbox'            => 0,
 			'shipping_ukrposhta_sender_postcode'    => '',

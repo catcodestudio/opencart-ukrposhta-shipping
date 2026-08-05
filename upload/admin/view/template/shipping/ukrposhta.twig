@@ -15,12 +15,11 @@
     </div>
   </div>
   <div class="container-fluid">
-    <div id="alert"></div>
-
-    <div class="alert alert-info d-flex justify-content-between align-items-center">
-      <span>{{ text_setup_hint }}</span>
+    {# Core header already provides #alert — a second one here swallows the toasts. #}
+    <div class="alert {{ is_setup ? 'alert-light' : 'alert-info' }} d-flex justify-content-between align-items-center">
+      <span>{{ is_setup ? text_setup_done : text_setup_hint }}</span>
       <span>
-        <button type="button" id="button-setup" data-url="{{ setup_url }}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-database"></i> {{ button_setup }}</button>
+        {% if not is_setup %}<button type="button" id="button-setup" data-url="{{ setup_url }}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-database"></i> {{ button_setup }}</button>{% endif %}
         <button type="button" id="button-sync" data-url="{{ sync_regions }}" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-rotate"></i> {{ button_sync_regions }}</button>
       </span>
     </div>
