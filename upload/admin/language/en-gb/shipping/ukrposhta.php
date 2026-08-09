@@ -49,7 +49,7 @@ $_['entry_sender_uuid']          = 'Sender client UUID';
 $_['entry_sender_postcode']      = 'Sender postcode';
 $_['entry_status']               = 'Enable shipping method';
 $_['entry_service_type']         = 'Service type';
-$_['entry_default_cost']         = 'Default cost, UAH';
+$_['entry_default_cost']         = 'Default cost';
 $_['entry_cod']                  = 'Cash on delivery for "pay on delivery" orders';
 $_['entry_paid_by_recipient']    = 'Delivery paid by recipient';
 $_['entry_auto_ttn']             = 'Auto-create shipment on status';
@@ -66,7 +66,7 @@ $_['help_token']                 = 'User token for shipment writes (?token=…).
 $_['help_tracking_bearer']       = 'Separate Bearer for tracking. If empty, the eCom Bearer is used.';
 $_['help_sender_uuid']           = 'Sender client UUID from the eCom cabinet (created once).';
 $_['help_sender_postcode']       = 'Dispatch post office index — required for tariff calculation.';
-$_['help_default_cost']          = 'Used when the API is unavailable or the recipient index is unknown.';
+$_['help_default_cost']          = 'Used when the API is unavailable or the recipient index is unknown. The amount is in the store default currency (same as the core Flat Rate).';
 $_['help_auto_ttn']              = 'When an order reaches this status the shipment is created automatically.';
 
 // Errors

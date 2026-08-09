@@ -44,6 +44,11 @@ class Ukrposhta extends \Opencart\System\Engine\Model {
 					if (!empty($resp['data']['postPayDeliveryPrice'])) {
 						$cost += (float)$resp['data']['postPayDeliveryPrice'];
 					}
+					// 🔴 Ukrposhta always answers in UAH, but a quote `cost` must be
+					// in the STORE's default currency — OpenCart multiplies it by the
+					// display-currency rate afterwards. On a shop whose default is not
+					// UAH the unconverted tariff is inflated by the whole rate.
+					$cost = $this->toStoreCurrency($cost);
 				}
 			}
 		}
@@ -74,27 +79,65 @@ class Ukrposhta extends \Opencart\System\Engine\Model {
 		return $raw === '' ? '' : \Opencart\System\Library\Ukrposhta\Crypto::decrypt($raw);
 	}
 
+	/**
+	 * UAH → the store's default currency. A store that has no UAH row (or whose
+	 * default already is UAH) gets the amount back untouched, so nothing is
+	 * scaled by a rate that does not exist.
+	 */
+	private function toStoreCurrency(float $uah): float {
+		$default = (string)$this->config->get('config_currency');
+		if ($default === '' || $default === 'UAH') {
+			return $uah;
+		}
+		try {
+			if (!$this->db->query("SELECT currency_id FROM `" . DB_PREFIX . "currency` WHERE code = 'UAH'")->num_rows) {
+				return $uah;
+			}
+			return (float)$this->currency->convert($uah, 'UAH', $default);
+		} catch (\Throwable $e) {
+			return $uah;
+		}
+	}
+
+	/**
+	 * Cart weight in grams — the unit the Ukrposhta tariff endpoint expects.
+	 *
+	 * getWeight() answers in the store's default weight class, so the conversion
+	 * goes through the core weight library, which divides by the class ratios in
+	 * `weight_class.value`. That ratio is the only reliable source: sniffing the
+	 * unit label instead made `kg` read as grams (strpos('kg','g') is truthy),
+	 * i.e. a 2 kg parcel was quoted as 2 grams.
+	 */
 	private function cartWeightGrams(): int {
 		if (!isset($this->cart) || !is_object($this->cart)) {
 			return 1000;
 		}
 		try {
-			$this->load->model('localisation/weight_class');
 			$w = (float)$this->cart->getWeight();
 			if ($w <= 0) return 1000;
-			// getWeight() is in the store's default weight unit. Convert to grams
-			// via the weight class unit value against the base kg (unit=1000 g).
-			$unit = (int)$this->config->get('config_weight_class_id');
-			$info = $this->model_localisation_weight_class->getWeightClass($unit);
-			$title = strtolower((string)($info['unit'] ?? ($info['title'] ?? '')));
-			// Already grams, or kilograms that need scaling. Written as an if
-			// rather than match() so the file still parses on PHP 7.4.
-			$is_grams = (strpos($title, 'g') !== false) || (strpos($title, 'г') !== false);
-			$grams = $is_grams ? $w : $w * 1000;
+			$from = (int)$this->config->get('config_weight_class_id');
+			$gram = $this->gramWeightClassId();
+			if ($gram > 0 && isset($this->weight) && is_object($this->weight)) {
+				$grams = (float)$this->weight->convert($w, $from, $gram);
+			} else {
+				// No gram class in this store's localisation: assume the default
+				// class is kilograms, which is what every UA shop uses.
+				$grams = $w * 1000;
+			}
 			return (int)max(round($grams), 1);
 		} catch (\Throwable $e) {
 			return 1000;
 		}
+	}
+
+	/**
+	 * Weight class whose unit is grams, 0 when the store has none.
+	 * ⚠ `unit` lives in weight_class_DESCRIPTION (it is language-specific), not
+	 * in weight_class — the ratio table has only `value`.
+	 */
+	private function gramWeightClassId(): int {
+		$row = $this->db->query("SELECT weight_class_id FROM `" . DB_PREFIX . "weight_class_description` WHERE LOWER(TRIM(unit)) IN ('g', 'г', 'gr') LIMIT 1")->row;
+		return $row ? (int)$row['weight_class_id'] : 0;
 	}
 
 	private function cartValue(): float {
