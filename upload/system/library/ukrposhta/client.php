@@ -1,10 +1,10 @@
 <?php
 namespace Opencart\System\Library\Ukrposhta;
-
 // ⚠ str_contains() lives in the GLOBAL namespace, so the polyfill cannot be
 // inlined in this file — it would land in this namespace instead. It is pulled
 // in right after the namespace line, before anything calls it.
 require_once __DIR__ . '/polyfill.php';
+
 require_once __DIR__ . '/translit.php';
 
 /**
@@ -174,14 +174,32 @@ class Client {
 	 * Domestic tariff quote. Weight in grams, dimensions in cm.
 	 * @return array normalized response; cost is in data['deliveryPrice'] on success.
 	 */
-	public function deliveryPrice(int $senderPostcode, int $recipientPostcode, int $weightG, array $dims, string $type = 'STANDARD', string $deliveryType = 'W2W', float $declaredPrice = 0, float $postPay = 0): array {
+	/**
+	 * Ukrposhta validates postcodes against `^$|\d{5}`, so they must stay
+	 * five-character strings: 01001 cast to an int becomes 1001 and every
+	 * request from a Kyiv sender came back HTTP 400.
+	 */
+	public static function postcode5($raw) {
+		$digits = preg_replace('/\D/', '', (string)$raw);
+		if ($digits === '') { return ''; }
+		return str_pad(substr($digits, 0, 5), 5, '0', STR_PAD_LEFT);
+	}
+
+	public function deliveryPrice($senderPostcode, $recipientPostcode, int $weightG, array $dims, string $type = 'STANDARD', string $deliveryType = 'W2W', float $declaredPrice = 0, float $postPay = 0): array {
 		$body = [
-			'weight'      => max($weightG, 1),
-			'length'      => max((int)($dims['length'] ?? 20), 1),
-			'width'       => max((int)($dims['width'] ?? 20), 1),
-			'height'      => max((int)($dims['height'] ?? 10), 1),
-			'addressFrom' => ['postcode' => $senderPostcode],
-			'addressTo'   => ['postcode' => $recipientPostcode],
+			// Measurements belong inside `parcels`; a flat body is rejected with
+			// "At least one parcel should be filled", so every quote silently
+			// fell back to the flat rate.
+			'parcels'      => [
+				[
+				'weight'      => max($weightG, 1),
+				'length'      => max((int)($dims['length'] ?? 20), 1),
+				'width'       => max((int)($dims['width'] ?? 20), 1),
+				'height'      => max((int)($dims['height'] ?? 10), 1),
+				],
+			],
+			'addressFrom' => ['postcode' => self::postcode5($senderPostcode)],
+			'addressTo'   => ['postcode' => self::postcode5($recipientPostcode)],
 			'type'        => $type,
 			'deliveryType'=> $deliveryType,
 		];
