@@ -44,7 +44,13 @@
   .up-spin{display:inline-block;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--up-accent) 40%,transparent);border-top-color:var(--up-accent);border-radius:50%;animation:up-spin .6s linear infinite;vertical-align:middle;}
   @keyframes up-spin{to{transform:rotate(360deg)}}
   .up-native-hidden{display:none!important;}
-  .up-gated{display:none!important;}`;
+  .up-gated{display:none!important;}
+  .up-mode{margin-left:auto;font-size:13px;font-weight:600;color:var(--up-accent);text-decoration:none;border-bottom:1px dashed currentColor;}
+  .up-mode[hidden]{display:none;}
+  .up-intl-note{padding:12px 18px;font-size:13px;color:var(--up-text);}
+  .up-intl-note[hidden]{display:none;}
+  .up-box--intl .up-box__body{display:none;}
+  .up-box--collapsed .up-box__body{display:none;}`;
 
   const SVG = (p, w) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 1.9}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
   const ICON_MAP = SVG('<path d="M9 18l-6 2V6l6-2 6 2 6-2v14l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/>');
@@ -70,6 +76,9 @@
     noRegion: 'Не знайдено',
     noCity: 'Нічого не знайдено',
     noOffice: 'Відділень не знайдено',
+    intlSwitch: 'Інша країна',
+    intlBack: 'Повернутись до відділень Укрпошти',
+    intlNote: 'Доставка за кордон: заповніть адресу нижче, вартість порахуємо за країною і вагою.',
   };
 
   const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; };
@@ -84,7 +93,8 @@
 
   const wrap = el(`
     <div class="up-box">
-      <div class="up-box__head"><span>${t.title}</span></div>
+      <div class="up-box__head"><span>${t.title}</span><a href="#" class="up-mode" id="up-mode-toggle" hidden>${t.intlSwitch}</a></div>
+      <div class="up-intl-note" id="up-intl-note" hidden>${t.intlNote}</div>
       <div class="up-box__body">
         <div class="up-grid">
           <div class="up-field up-field--region" data-up="region">
@@ -184,7 +194,24 @@
         || null;
   };
 
+  // Foreign-address mode: the widget stops replacing the native form so the
+  // buyer can reach the country select. `intlMode` gates every place that would
+  // otherwise re-hide it (restore, gate polling, method changes).
+  let intlMode = false;
+
+  const showNativeAddress = () => {
+    // Another carrier's widget (Nova Poshta uses `np-native-hidden`) may be
+    // hiding the very same address block. Abroad none of those carriers can
+    // deliver anyway, so the foreign-address mode un-hides whatever any
+    // `*-native-hidden` marker covered — otherwise the country select stays
+    // invisible and no international quote can ever be requested.
+    document.querySelectorAll('#shipping-address [class*="-native-hidden"]').forEach((el) => {
+      el.className = el.className.split(/\s+/).filter((c) => !/-native-hidden$/.test(c)).join(' ');
+    });
+  };
+
   const hideNativeAddress = () => {
+    if (intlMode) return;
     const host = document.querySelector('#shipping-address');
     if (!host) return;
     [...host.children].forEach((child) => {
@@ -229,6 +256,10 @@
     // would otherwise stomp a Nova Poshta choice with "Укрпошта"/first-zone
     // (AR Krym) defaults. No-op unless the Ukrposhta method is chosen.
     if (selectedShippingCode().indexOf('ukrposhta.') !== 0) return;
+    // Abroad the customer's own country/city/street must stand — overwriting it
+    // with Ukraine here is exactly how a foreign order ends up addressed to a
+    // Ukrainian post office.
+    if (intlMode) return;
     const country = q1(NATIVE.country);
     if (country && country.value !== '220') {
       const opt = [...country.options].find((o) => /Україна|Ukraine/i.test(o.text));
@@ -429,9 +460,36 @@
 
   const loadRegions = () => api(cfg.regions).then((d) => { regions = (d && d.regions) || []; }).catch(() => { regions = []; }).finally(() => { if (!regions.length) regions = STATIC_REGIONS.slice(); regionsReady = true; if (regionInput() === document.activeElement) renderRegions(regionInput().value); });
 
+  const modeToggle = () => wrap.querySelector('#up-mode-toggle');
+  const intlNote = () => wrap.querySelector('#up-intl-note');
+
+  const applyMode = (on, persist) => {
+    intlMode = !!on;
+    wrap.classList.toggle('up-box--intl', intlMode);
+    const note = intlNote();
+    if (note) note.hidden = !intlMode;
+    const tg = modeToggle();
+    if (tg) tg.textContent = intlMode ? t.intlBack : t.intlSwitch;
+    if (intlMode) {
+      showNativeAddress();
+    } else {
+      hideNativeAddress();
+      fillNativeAddress();
+    }
+    if (persist && cfg.setMode) api(cfg.setMode, { mode: intlMode ? 'intl' : 'ua' }).catch(() => {});
+  };
+
+  const wireMode = () => {
+    const tg = modeToggle();
+    if (!tg || !cfg.intl) return;
+    tg.hidden = false;
+    tg.addEventListener('click', (e) => { e.preventDefault(); applyMode(!intlMode, true); });
+  };
+
   const restore = () => {
     api(cfg.getSelection).then((d) => {
       if (!d) return;
+      if (cfg.intl && d.mode === 'intl') { applyMode(true, false); return; }
       if (d.region_id) { regionId = d.region_id; regionName = d.region_name || regionName; if (regionName) regionInput().value = regionName; }
       if (d.city_id && d.city_name) {
         cityId = d.city_id; cityName = d.city_name;
@@ -462,6 +520,16 @@
   const gate = () => {
     const isUp = selectedShippingCode().indexOf('ukrposhta.') === 0;
     const _wasHidden = wrap.classList.contains('up-gated');
+    // With the international leg on, the box may not disappear entirely while
+    // another method is selected: its header carries the only way back to the
+    // country field, and hiding it deadlocks the buyer — no foreign address, so
+    // no international method, so no widget.
+    if (cfg.intl && !isUp) {
+      wrap.classList.remove('up-gated');
+      wrap.classList.add('up-box--collapsed');
+      return;
+    }
+    wrap.classList.remove('up-box--collapsed');
     wrap.classList.toggle('up-gated', !isUp);
     // Widget appeared for our carrier — on mobile it renders above the
     // method selector, so scroll it into view instead of leaving the
@@ -603,6 +671,7 @@
     // the customer off clicking the method button (which now works).
     document.querySelector('#error-shipping-method')?.classList.remove('d-block');
     hideNativeAddress();
+    wireMode();
     bind();
     seedNative();
     wireGate();

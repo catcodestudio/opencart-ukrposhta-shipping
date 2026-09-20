@@ -36,6 +36,8 @@ class Events extends \Opencart\System\Engine\Controller {
 			'getOffices'   => $baseUrl . 'index.php?route=extension/ukrposhta/checkout.getOffices',
 			'setSelection' => $baseUrl . 'index.php?route=extension/ukrposhta/checkout.setSelection',
 			'getSelection' => $baseUrl . 'index.php?route=extension/ukrposhta/checkout.getSelection',
+			'setMode'      => $baseUrl . 'index.php?route=extension/ukrposhta/checkout.setMode',
+			'intl'         => (bool)$this->config->get('shipping_ukrposhta_intl_status'),
 			'accentColor'  => $accent,
 			'radius'       => $radius,
 			'theme'        => $theme,
@@ -58,6 +60,12 @@ class Events extends \Opencart\System\Engine\Controller {
 			return;
 		}
 		if (isset($this->session->data['shipping_address']['address_id'])) {
+			return;
+		}
+		// Buyer switched the widget to a foreign address: seeding Ukraine here
+		// would overwrite the country they are about to choose, and the
+		// international quote would never be asked for.
+		if ((string)($this->session->data['up_mode'] ?? '') === 'intl') {
 			return;
 		}
 		$this->load->model('localisation/country');

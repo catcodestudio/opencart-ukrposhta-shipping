@@ -73,3 +73,19 @@ $_['help_auto_ttn']              = 'When an order reaches this status the shipme
 $_['error_permission']           = 'You do not have permission to modify this module.';
 $_['error_bearer_empty']         = 'Bearer key is not set.';
 $_['error_sender_postcode_empty']= 'Sender postcode is not set.';
+
+// --- International shipments ---
+$_['tab_international']          = 'International shipments';
+$_['entry_intl_status']          = 'Quote international delivery';
+$_['help_intl_status']           = 'For addresses outside Ukraine the rate is keyed by country and weight — no post office is picked. When off, the method is simply not offered abroad.';
+$_['entry_intl_transport']       = 'Transport type';
+$_['text_intl_avia']             = 'Air';
+$_['text_intl_ground']           = 'Ground';
+$_['entry_intl_package']         = 'Package type';
+$_['entry_intl_category']        = 'Content category';
+$_['entry_intl_currency']        = 'Tariff currency';
+$_['help_intl_currency']         = 'Some destinations (the US among them) are only quoted in USD.';
+$_['entry_intl_default_cost']    = 'International fallback rate';
+$_['help_intl_default_cost']     = 'Leave empty so a failed quote shows the reason instead of an invented price. Fill it in only if you deliberately want a flat international rate.';
+$_['text_quote_intl_ok']         = 'International (Poland, 1 kg): %.2f UAH.';
+$_['text_quote_intl_fail']       = 'International rate failed:';

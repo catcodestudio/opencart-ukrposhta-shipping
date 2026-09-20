@@ -21,6 +21,14 @@ class Ukrposhta extends \Opencart\System\Engine\Model {
 			return [];
 		}
 
+		// International destinations never touch the office picker: the tariff is
+		// keyed by country + weight, so the branch splits before anything reads
+		// the picked office out of the session.
+		$iso2 = strtoupper(trim((string)($address['iso_code_2'] ?? '')));
+		if ($iso2 !== '' && $iso2 !== 'UA') {
+			return $this->internationalQuote($iso2);
+		}
+
 		$defaultCost = (float)$this->config->get('shipping_ukrposhta_default_cost');
 		$cost        = $defaultCost;
 
@@ -150,5 +158,93 @@ class Ukrposhta extends \Opencart\System\Engine\Model {
 		} catch (\Throwable $e) {
 			return 100.0;
 		}
+	}
+
+	/**
+	 * Quote for a destination outside Ukraine.
+	 *
+	 * Returns [] (method simply absent) when the merchant has not enabled the
+	 * international leg — that is a configuration choice, not a failure. When it
+	 * IS enabled but the tariff call fails, the method is shown with an `error`
+	 * instead of a made-up price: a silent flat-rate fallback is how a broken
+	 * quote stays invisible until the parcel is already sold at the wrong price.
+	 */
+	private function internationalQuote(string $iso2): array {
+		if (!$this->config->get('shipping_ukrposhta_intl_status')) {
+			return [];
+		}
+
+		$bearer = $this->secret('shipping_ukrposhta_bearer');
+		$cost   = null;
+		$error  = '';
+
+		if ($bearer === '') {
+			$error = $this->language->get('error_intl_unavailable');
+		} else {
+			$client = new \Opencart\System\Library\Ukrposhta\Client($bearer, '', (bool)$this->config->get('shipping_ukrposhta_sandbox'));
+			$resp   = $client->internationalDeliveryPrice(
+				$iso2,
+				$this->cartWeightGrams(),
+				[],
+				[
+					'transportType' => (string)($this->config->get('shipping_ukrposhta_intl_transport') ?: 'AVIA'),
+					'packageType'   => (string)($this->config->get('shipping_ukrposhta_intl_package') ?: 'PARCEL'),
+					'categoryType'  => (string)($this->config->get('shipping_ukrposhta_intl_category') ?: 'SALE_OF_GOODS'),
+					'currencyCode'  => (string)($this->config->get('shipping_ukrposhta_intl_currency') ?: 'USD'),
+					'declaredPrice' => $this->cartValue(),
+				]
+			);
+
+			$live = $resp['data']['deliveryPrice'] ?? null;
+			if (!empty($resp['success']) && $live !== null && (float)$live > 0) {
+				$cost = $this->toStoreCurrency((float)$live);
+			} else {
+				// The API answers with a `message` for "this country cannot be served
+				// with this package type", so an empty price is not always an HTTP
+				// error — surface whatever it said.
+				$error = trim((string)($resp['data']['message'] ?? ''));
+				if ($error === '') { $error = implode('; ', (array)($resp['errors'] ?? [])); }
+				if ($error === '') { $error = $this->language->get('error_intl_unavailable'); }
+			}
+		}
+
+		if ($cost === null) {
+			$fallback = (float)$this->config->get('shipping_ukrposhta_intl_default_cost');
+			if ($fallback > 0) {
+				$cost  = $fallback;
+				$error = '';
+			}
+		}
+
+		if ($cost === null) {
+			return [
+				'code'       => 'ukrposhta',
+				'name'       => $this->language->get('heading_title'),
+				'quote'      => [],
+				'sort_order' => $this->config->get('shipping_ukrposhta_sort_order'),
+				'error'      => $error,
+			];
+		}
+
+		$tax_class_id = (int)$this->config->get('shipping_ukrposhta_tax_class_id');
+		$quote_data = [];
+		$quote_data['ukrposhta_intl'] = [
+			'code'         => 'ukrposhta.ukrposhta_intl',
+			'name'         => $this->language->get('text_description_intl'),
+			'cost'         => $cost,
+			'tax_class_id' => $tax_class_id,
+			'text'         => $this->currency->format(
+				$this->tax->calculate($cost, $tax_class_id, $this->config->get('config_tax')),
+				$this->session->data['currency']
+			),
+		];
+
+		return [
+			'code'       => 'ukrposhta',
+			'name'       => $this->language->get('heading_title'),
+			'quote'      => $quote_data,
+			'sort_order' => $this->config->get('shipping_ukrposhta_sort_order'),
+			'error'      => false,
+		];
 	}
 }

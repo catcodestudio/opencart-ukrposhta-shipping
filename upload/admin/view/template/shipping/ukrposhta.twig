@@ -106,6 +106,58 @@
           </div>
 
           <div class="card mb-3">
+            <div class="card-header"><i class="fa-solid fa-earth-europe"></i> {{ tab_international }}</div>
+            <div class="card-body">
+              <div class="form-check form-switch mb-3">
+                <input type="checkbox" class="form-check-input" id="input-intl-status" name="shipping_ukrposhta_intl_status" value="1" {% if shipping_ukrposhta_intl_status %}checked{% endif %}>
+                <label class="form-check-label" for="input-intl-status">{{ entry_intl_status }}</label>
+                <div class="form-text">{{ help_intl_status }}</div>
+              </div>
+              <div class="row">
+                <div class="col mb-3">
+                  <label class="form-label" for="input-intl-transport">{{ entry_intl_transport }}</label>
+                  <select id="input-intl-transport" name="shipping_ukrposhta_intl_transport" class="form-select">
+                    <option value="AVIA" {% if shipping_ukrposhta_intl_transport == 'AVIA' %}selected{% endif %}>{{ text_intl_avia }}</option>
+                    <option value="GROUND" {% if shipping_ukrposhta_intl_transport == 'GROUND' %}selected{% endif %}>{{ text_intl_ground }}</option>
+                  </select>
+                </div>
+                <div class="col mb-3">
+                  <label class="form-label" for="input-intl-package">{{ entry_intl_package }}</label>
+                  <select id="input-intl-package" name="shipping_ukrposhta_intl_package" class="form-select">
+                    {% for pt in ['PARCEL', 'EMS', 'SMALL_BAG', 'BANDEROLE', 'PRIME', 'DECLARED_VALUE', 'LETTER'] %}
+                      <option value="{{ pt }}" {% if shipping_ukrposhta_intl_package == pt %}selected{% endif %}>{{ pt }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col mb-3">
+                  <label class="form-label" for="input-intl-category">{{ entry_intl_category }}</label>
+                  <select id="input-intl-category" name="shipping_ukrposhta_intl_category" class="form-select">
+                    {% for ct in ['SALE_OF_GOODS', 'GIFT', 'MIXED_CONTENT', 'DOCUMENTS', 'COMMERCIAL_SAMPLE', 'RETURNING_GOODS'] %}
+                      <option value="{{ ct }}" {% if shipping_ukrposhta_intl_category == ct %}selected{% endif %}>{{ ct }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col mb-3">
+                  <label class="form-label" for="input-intl-currency">{{ entry_intl_currency }}</label>
+                  <select id="input-intl-currency" name="shipping_ukrposhta_intl_currency" class="form-select">
+                    {% for cc in ['USD', 'EUR'] %}
+                      <option value="{{ cc }}" {% if shipping_ukrposhta_intl_currency == cc %}selected{% endif %}>{{ cc }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">{{ help_intl_currency }}</div>
+                </div>
+                <div class="col mb-3">
+                  <label class="form-label" for="input-intl-default-cost">{{ entry_intl_default_cost }}</label>
+                  <input type="text" id="input-intl-default-cost" name="shipping_ukrposhta_intl_default_cost" value="{{ shipping_ukrposhta_intl_default_cost }}" class="form-control">
+                  <div class="form-text">{{ help_intl_default_cost }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mb-3">
             <div class="card-header"><i class="fa-solid fa-palette"></i> {{ tab_appearance }}</div>
             <div class="card-body">
               <div class="row">

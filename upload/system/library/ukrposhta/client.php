@@ -208,6 +208,48 @@ class Client {
 		return $this->request('POST', $this->ecom . '/domestic/delivery-price', $body, $this->bearer);
 	}
 
+	/**
+	 * International tariff quote (`/international/delivery-price`).
+	 *
+	 * Unlike the domestic endpoint this one takes a FLAT body — a `parcels` array
+	 * here is ignored and the call fails on the missing top-level `weight`. The
+	 * destination is the COUNTRY only: no postcode, no city, no office, which is
+	 * exactly why an international quote can be shown before the buyer picks
+	 * anything but their country.
+	 *
+	 * Enums accepted by the API (verified live 20.08.2026):
+	 *   transportType: AVIA | GROUND
+	 *   packageType  : SMALL_BAG | LETTER | LETTER_ESTAMP | PARCEL | EMS |
+	 *                  DECLARED_VALUE | PRIME | BANDEROLE
+	 *   categoryType : GIFT | MIXED_CONTENT | SALE_OF_GOODS | DOCUMENTS |
+	 *                  RETURNING_GOODS | COMMERCIAL_SAMPLE
+	 *
+	 * @param string $countryIso2 ISO 3166-1 alpha-2, e.g. PL, DE, US.
+	 * @param array  $opts        transportType, packageType, categoryType,
+	 *                            currencyCode, declaredPrice, items[]
+	 * @return array normalized response; cost in UAH is data['deliveryPrice'].
+	 */
+	public function internationalDeliveryPrice(string $countryIso2, int $weightG, array $dims = [], array $opts = []): array {
+		$body = [
+			'weight'                  => max($weightG, 1),
+			'length'                  => max((int)($dims['length'] ?? 20), 1),
+			'width'                   => max((int)($dims['width'] ?? 20), 1),
+			'height'                  => max((int)($dims['height'] ?? 10), 1),
+			'recipientCountryIso3166' => strtoupper(substr(trim($countryIso2), 0, 2)),
+			'transportType'           => (string)($opts['transportType'] ?? 'AVIA'),
+			'packageType'             => (string)($opts['packageType'] ?? 'PARCEL'),
+		];
+		// Some destinations (US among them) reject a quote without these two.
+		if (!empty($opts['currencyCode'])) { $body['currencyCode'] = (string)$opts['currencyCode']; }
+		if (!empty($opts['categoryType'])) { $body['categoryType'] = (string)$opts['categoryType']; }
+		if (!empty($opts['declaredPrice'])) { $body['declaredPrice'] = (float)$opts['declaredPrice']; }
+		// Customs destinations additionally demand an item list with real HS codes;
+		// the per-item price field is `value`, not `price`/`amount`.
+		if (!empty($opts['items']) && is_array($opts['items'])) { $body['items'] = array_values($opts['items']); }
+
+		return $this->request('POST', $this->ecom . '/international/delivery-price', $body, $this->bearer);
+	}
+
 	// ---------------------------------------------------------------- clients
 
 	/** Create (or upsert) a client. Returns the created client uuid in data['uuid']. */

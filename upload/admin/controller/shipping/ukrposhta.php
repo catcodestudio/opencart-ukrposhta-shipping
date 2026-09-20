@@ -216,6 +216,12 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 			'shipping_ukrposhta_sort_order'         => 0,
 			'shipping_ukrposhta_tax_class_id'       => 0,
 			'shipping_ukrposhta_geo_zone_id'        => 0,
+			'shipping_ukrposhta_intl_status'        => 0,
+			'shipping_ukrposhta_intl_transport'     => 'AVIA',
+			'shipping_ukrposhta_intl_package'       => 'PARCEL',
+			'shipping_ukrposhta_intl_category'      => 'SALE_OF_GOODS',
+			'shipping_ukrposhta_intl_currency'      => 'USD',
+			'shipping_ukrposhta_intl_default_cost'  => '',
 		];
 		foreach ($fields as $key => $default) {
 			$val = $this->config->get($key);
@@ -244,7 +250,7 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 			$post = $this->request->post;
 			// Unchecked Bootstrap switches are absent from POST — coerce to 0 so the
 			// replace-all merge doesn't preserve a stale "on" value.
-			foreach (['shipping_ukrposhta_status', 'shipping_ukrposhta_sandbox'] as $cb) {
+			foreach (['shipping_ukrposhta_status', 'shipping_ukrposhta_sandbox', 'shipping_ukrposhta_intl_status'] as $cb) {
 				$post[$cb] = isset($post[$cb]) && (string)$post[$cb] !== '0' ? 1 : 0;
 			}
 			$this->load->model('setting/setting');
@@ -325,6 +331,30 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 				$cost = $resp['data']['deliveryPrice'] ?? null;
 				if (!empty($resp['success']) && $cost !== null) {
 					$json['success'] = sprintf($this->language->get('text_quote_ok'), (float)$cost);
+					// When the international leg is on, probe it too: a domestic-only
+					// check passes even if the country tariff is misconfigured, and
+					// the merchant finds out from a customer instead.
+					if ($this->config->get('shipping_ukrposhta_intl_status')) {
+						$intl = $client->internationalDeliveryPrice(
+							'PL',
+							1000,
+							[],
+							[
+								'transportType' => (string)($this->config->get('shipping_ukrposhta_intl_transport') ?: 'AVIA'),
+								'packageType'   => (string)($this->config->get('shipping_ukrposhta_intl_package') ?: 'PARCEL'),
+								'categoryType'  => (string)($this->config->get('shipping_ukrposhta_intl_category') ?: 'SALE_OF_GOODS'),
+								'currencyCode'  => (string)($this->config->get('shipping_ukrposhta_intl_currency') ?: 'USD'),
+								'declaredPrice' => 500,
+							]
+						);
+						$intlCost = $intl['data']['deliveryPrice'] ?? null;
+						if (!empty($intl['success']) && $intlCost !== null && (float)$intlCost > 0) {
+							$json['success'] .= ' ' . sprintf($this->language->get('text_quote_intl_ok'), (float)$intlCost);
+						} else {
+							$reason = trim((string)($intl['data']['message'] ?? '')) ?: implode('; ', (array)($intl['errors'] ?? []));
+							$json['success'] .= ' ' . $this->language->get('text_quote_intl_fail') . ' ' . $reason;
+						}
+					}
 				} else {
 					$json['error'] = $this->language->get('text_quote_fail') . ' ' . implode('; ', $resp['errors'] ?? []);
 				}

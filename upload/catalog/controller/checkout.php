@@ -55,8 +55,28 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		$this->jsonResponse(['ok' => true]);
 	}
 
+	/**
+	 * Switch between the domestic office picker and a plain foreign address.
+	 *
+	 * The widget REPLACES the native address form, so without this the buyer has
+	 * no way to reach the country select and an international quote could never
+	 * be requested. Leaving Ukraine also drops the office selection: a stale
+	 * postindex would otherwise be written onto a foreign order.
+	 */
+	public function setMode(): void {
+		$intl = trim((string)($this->request->post['mode'] ?? '')) === 'intl';
+		$this->session->data['up_mode'] = $intl ? 'intl' : 'ua';
+		if ($intl) {
+			foreach (['up_region_id', 'up_region_name', 'up_city_id', 'up_city_name', 'up_office_postindex', 'up_office_name'] as $k) {
+				unset($this->session->data[$k]);
+			}
+		}
+		$this->jsonResponse(['ok' => true, 'mode' => $this->session->data['up_mode']]);
+	}
+
 	public function getSelection(): void {
 		$this->jsonResponse([
+			'mode'             => (string)($this->session->data['up_mode'] ?? 'ua'),
 			'region_id'        => (string)($this->session->data['up_region_id'] ?? ''),
 			'region_name'      => (string)($this->session->data['up_region_name'] ?? ''),
 			'city_id'          => (string)($this->session->data['up_city_id'] ?? ''),
