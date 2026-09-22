@@ -52,6 +52,11 @@ class Checkout extends \Opencart\System\Engine\Controller {
 		$this->session->data['up_office_postindex'] = trim((string)($this->request->post['office_postindex'] ?? ''));
 		$this->session->data['up_office_name']      = trim((string)($this->request->post['office_name'] ?? ''));
 		$this->applyToShippingAddress();
+		// The tariff is keyed by the chosen office index, so the quote list the
+		// core cached when the carrier was picked (no office yet — hence the flat
+		// fallback) must not survive the pick: `shipping_method.save` validates
+		// against this cache, so a stale entry would re-save the old price.
+		unset($this->session->data['shipping_methods']);
 		$this->jsonResponse(['ok' => true]);
 	}
 
@@ -71,6 +76,9 @@ class Checkout extends \Opencart\System\Engine\Controller {
 				unset($this->session->data[$k]);
 			}
 		}
+		// Domestic and international quotes are different requests entirely —
+		// keep no cached list across the switch.
+		unset($this->session->data['shipping_methods']);
 		$this->jsonResponse(['ok' => true, 'mode' => $this->session->data['up_mode']]);
 	}
 
