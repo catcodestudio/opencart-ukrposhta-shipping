@@ -56,7 +56,7 @@ class Events extends \Opencart\System\Engine\Controller {
 	 * the natural order; the picker/setSelection then writes the real address.
 	 */
 	private function seedShippingAddress(): void {
-		if (((string)($this->request->get['route'] ?? '')) !== 'checkout/checkout') {
+		if (!in_array((string)($this->request->get['route'] ?? ''), ['checkout/checkout', 'extension/cc_onepage/checkout'], true)) {
 			return;
 		}
 		if (isset($this->session->data['shipping_address']['address_id'])) {

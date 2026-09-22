@@ -4,7 +4,7 @@
 
   // Storefront checkout only.
   const route = new URLSearchParams(location.search).get('route') || '';
-  if (route !== 'checkout/checkout') return;
+  if (route !== 'checkout/checkout' && route !== 'extension/cc_onepage/checkout') return;
 
   const accent = /^#[0-9a-fA-F]{6}$/.test(cfg.accentColor || '') ? cfg.accentColor : '#374151';
   const radiusRaw = parseInt(cfg.radius, 10);
