@@ -709,14 +709,23 @@
     const isUp = selectedShippingCode().indexOf('ukrposhta.') === 0;
     ownNative(isUp);
     const _wasHidden = wrap.classList.contains('up-gated');
-    // With the international leg on, the box may not disappear entirely while
-    // another method is selected: its header carries the only way back to the
-    // country field, and hiding it deadlocks the buyer — no foreign address, so
-    // no international method, so no widget.
+    // With the international leg on, the header «Інша країна» is the way back to
+    // the country field. It stays on screen without our method only when it is
+    // really needed: in foreign-address mode, or when no other carrier holds the
+    // address form and the country select still cannot be reached. Another
+    // carrier chosen (Nova Poshta, ROZETKA…) — the box goes away completely: the
+    // buyer can switch to Ukrposhta in the method list, and an empty grey
+    // «Доставка Укрпоштою» bar above the other carrier's widget only confused.
     if (cfg.intl && !isUp) {
-      wrap.classList.remove('up-gated');
-      wrap.classList.add('up-box--collapsed');
-      return;
+      const code = selectedShippingCode();
+      const country = document.querySelector('#input-shipping-country');
+      const countryReachable = !!country && country.offsetParent !== null;
+      const otherCarrier = !!code && ccAddr.isCarrier(code);
+      if (intlMode || (!otherCarrier && !countryReachable)) {
+        wrap.classList.remove('up-gated');
+        wrap.classList.add('up-box--collapsed');
+        return;
+      }
     }
     wrap.classList.remove('up-box--collapsed');
     wrap.classList.toggle('up-gated', !isUp);
