@@ -1,11 +1,22 @@
 <?php
 namespace Opencart\Admin\Controller\Extension\Ukrposhta\Shipping;
 
+require_once dirname(__DIR__, 3) . '/system/library/cc_keep.php';
+
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/client.php';
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/crypto.php';
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/cache.php';
 
 class Ukrposhta extends \Opencart\System\Engine\Controller {
+	public function __construct(\Opencart\System\Engine\Registry $registry) {
+		parent::__construct($registry);
+
+		// Any request to this screen may change the settings, and the core wipes them on uninstall.
+		if (strpos((string)($this->request->get['route'] ?? ''), 'extension/ukrposhta/shipping/ukrposhta') === 0) {
+			\CcSettingsKeep::mirrorAfter($this->db, 'shipping_ukrposhta');
+		}
+	}
+
 	// Secret fields stored encrypted at rest. Read-only build needs only the
 	// eCom Bearer (Address Classifier + tariff both authorize with it).
 	private const SECRET_FIELDS = [
@@ -34,6 +45,8 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 	}
 
 	public function install(): void {
+		\CcSettingsKeep::restoreAfter($this->db, 'shipping_ukrposhta');
+
 		$prefix = DB_PREFIX;
 
 		$this->db->query("CREATE TABLE IF NOT EXISTS `{$prefix}up_shipment` (
