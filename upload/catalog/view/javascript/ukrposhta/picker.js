@@ -39,8 +39,6 @@
   .up-opt:hover,.up-opt.is-active{background:color-mix(in srgb,var(--up-accent) 16%,transparent);}
   .up-opt--muted{color:var(--up-muted);cursor:default;text-align:center;}
   .up-opt--pin{display:inline-block;font-size:11px;font-weight:700;color:var(--up-accent);margin-right:6px;}
-  .up-summary{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:9px 13px;font-size:13px;font-weight:600;color:var(--up-text);background:color-mix(in srgb,var(--up-accent) 16%,transparent);border-radius:calc(var(--up-radius) * .65);}
-  .up-summary[hidden]{display:none;}
   .up-spin{display:inline-block;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--up-accent) 40%,transparent);border-top-color:var(--up-accent);border-radius:50%;animation:up-spin .6s linear infinite;vertical-align:middle;}
   @keyframes up-spin{to{transform:rotate(360deg)}}
   .up-native-hidden{display:none!important;}
@@ -117,7 +115,6 @@
             <input type="hidden" id="up-office">
           </div>
         </div>
-        <div class="up-summary" id="up-summary" hidden></div>
       </div>
     </div>`);
 
@@ -410,23 +407,10 @@
   const officeInput = () => wrap.querySelector('#up-office-q');
   const officeMenu = () => wrap.querySelector('#up-office-results');
   const officeHidden = () => wrap.querySelector('#up-office');
-  const summary = () => wrap.querySelector('#up-summary');
 
   const openMenu = (m) => m.classList.add('is-open');
   const closeMenu = (m) => m.classList.remove('is-open');
   const muted = (text) => `<div class="up-opt up-opt--muted">${text}</div>`;
-
-  const renderSummary = () => {
-    const s = summary();
-    const offName = officeHidden().dataset.name || '';
-    const pi = officeHidden().value || '';
-    if (cityName && offName) {
-      s.innerHTML = `${ICON_OK}<span>${cityName} — ${offName} (${pi})</span>`;
-      s.hidden = false;
-    } else {
-      s.hidden = true;
-    }
-  };
 
   // --- region combobox ---
   const renderRegions = (filter) => {
@@ -450,7 +434,6 @@
     const ci = cityInput(); ci.disabled = false; ci.value = ''; ci.placeholder = t.cityReady;
     const oi = officeInput(); oi.disabled = true; oi.value = ''; oi.placeholder = t.officePh;
     officeHidden().value = ''; officeHidden().dataset.name = ''; offices = [];
-    renderSummary();
   };
 
   // --- city autocomplete (needs region) ---
@@ -480,7 +463,6 @@
     const oi = officeInput();
     oi.disabled = false; oi.value = ''; oi.placeholder = t.loading;
     officeHidden().value = ''; officeHidden().dataset.name = ''; offices = []; officesLoaded = false;
-    renderSummary();
     fillNativeAddress();
     api(cfg.getOffices, { city_id: id, district_id: cityDistrict, region_id: regionId }).then((d) => {
       offices = (d && d.offices) || [];
@@ -520,7 +502,6 @@
     officeHidden().value = pi;
     officeHidden().dataset.name = name;
     closeMenu(officeMenu());
-    renderSummary();
     fillNativeAddress();
     api(cfg.setSelection, { region_id: regionId, region_name: regionName, city_id: cityId, city_name: cityName, office_postindex: pi, office_name: name })
       .then(requoteAfterPick, requoteAfterPick);
@@ -602,7 +583,7 @@
 
     ci.addEventListener('input', () => {
       const v = ci.value.trim();
-      cityId = ''; renderSummary();
+      cityId = '';
       if (v.length < 2) { closeMenu(cm); return; }
       cm.innerHTML = muted(`<span class="up-spin"></span> ${t.searching}`); openMenu(cm);
       searchCities(v);
@@ -671,7 +652,6 @@
         if (cityId) {
           api(cfg.getOffices, { city_id: cityId, region_id: regionId }).then((r) => { offices = (r && r.offices) || []; });
         }
-        renderSummary();
         api(cfg.setSelection, { region_id: regionId, region_name: regionName, city_id: cityId, city_name: cityName, office_postindex: d.office_postindex, office_name: d.office_name || '' });
       }
       fillNativeAddress();

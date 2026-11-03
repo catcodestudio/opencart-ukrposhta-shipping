@@ -1,5 +1,8 @@
 # Ukrposhta Shipping — OpenCart 4.x
 
+## 1.2.10 — 2026-11-03
+- Прибрано зайвий рядок із вибраним відділенням під полями: місто й відділення вже видно в самих полях.
+
 ## 1.2.9 — 2026-11-01
 - Updates keep the settings from this version on. Before updating to this version, note the settings and the licence key, or replace the files over FTP without uninstalling.
 
