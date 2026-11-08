@@ -6,6 +6,7 @@ require_once dirname(__DIR__, 3) . '/system/library/cc_keep.php';
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/client.php';
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/crypto.php';
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/cache.php';
+require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/pro/pro.php';
 
 class Ukrposhta extends \Opencart\System\Engine\Controller {
 	public function __construct(\Opencart\System\Engine\Registry $registry) {
@@ -140,10 +141,12 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 		]);
 
 		$this->load->model('setting/cron');
-		foreach (['ukrposhta_poll', 'ukrposhta_sync_regions'] as $code) {
+		foreach (['ukrposhta_poll', 'ukrposhta_sync_regions', 'ukrposhta_track'] as $code) {
 			try { $this->model_setting_cron->deleteCronByCode($code); } catch (\Throwable $e) {}
 		}
 		$this->model_setting_cron->addCron('ukrposhta_sync_regions', 'Ukrposhta — weekly region classifier sync', 'week', 'extension/ukrposhta/cron.syncRegions', true);
+		$this->model_setting_cron->addCron('ukrposhta_track', 'Ukrposhta Pro — delivery statuses and the licence check', 'hour', 'extension/ukrposhta/cron.track', true);
+		(new \CcUpPro($this->db, $this->config, 'strval', 'strval', 'en'))->ensureSchema();
 
 		$this->load->model('user/user_group');
 		foreach (['extension/ukrposhta/shipping/ukrposhta'] as $route) {
@@ -160,7 +163,7 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 			try { $this->model_setting_event->deleteEventByCode($code); } catch (\Throwable $e) {}
 		}
 		$this->load->model('setting/cron');
-		foreach (['ukrposhta_poll', 'ukrposhta_sync_regions'] as $code) {
+		foreach (['ukrposhta_poll', 'ukrposhta_sync_regions', 'ukrposhta_track'] as $code) {
 			try { $this->model_setting_cron->deleteCronByCode($code); } catch (\Throwable $e) {}
 		}
 		// Tables preserved to avoid losing saved office selections.
@@ -245,6 +248,8 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 		$data['tax_classes'] = $this->model_localisation_tax_class->getTaxClasses();
 		$this->load->model('localisation/geo_zone');
 		$data['geo_zones'] = $this->model_localisation_geo_zone->getGeoZones();
+
+		$data['pro_html'] = $this->proSettingsHtml();
 
 		$data['header']      = $this->load->controller('common/header');
 		$data['column_left'] = $this->load->controller('common/column_left');
@@ -374,5 +379,124 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 			}
 		}
 		$this->jsonResponse($json);
+	}
+
+	// ------------------------------------------------------------------ Pro
+
+	private function link(string $method, string $args = ''): string {
+		$route = 'extension/ukrposhta/shipping/ukrposhta' . ($method !== '' ? '.' . $method : '');
+		return html_entity_decode($this->url->link($route, 'user_token=' . $this->session->data['user_token'] . $args), ENT_QUOTES, 'UTF-8');
+	}
+
+	private function proCore(): \CcUpPro {
+		$core = new \CcUpPro(
+			$this->db,
+			$this->config,
+			static function ($v) { return \Opencart\System\Library\Ukrposhta\Crypto::encrypt((string)$v); },
+			static function ($v) { return \Opencart\System\Library\Ukrposhta\Crypto::decrypt((string)$v); },
+			(string)$this->language->get('code')
+		);
+		$config = $this->config;
+		$core->mailer = static function ($to, $subject, $text) use ($config) {
+			try {
+				$option = [
+					'parameter'     => $config->get('config_mail_parameter'),
+					'smtp_hostname' => $config->get('config_mail_smtp_hostname'),
+					'smtp_username' => $config->get('config_mail_smtp_username'),
+					'smtp_password' => html_entity_decode((string)$config->get('config_mail_smtp_password'), ENT_QUOTES, 'UTF-8'),
+					'smtp_port'     => $config->get('config_mail_smtp_port'),
+					'smtp_timeout'  => $config->get('config_mail_smtp_timeout'),
+				];
+				$mail = new \Opencart\System\Library\Mail((string)$config->get('config_mail_engine'), $option);
+				$mail->setTo($to);
+				$mail->setFrom((string)$config->get('config_email'));
+				$mail->setSender(html_entity_decode((string)$config->get('config_name'), ENT_QUOTES, 'UTF-8'));
+				$mail->setSubject($subject);
+				$mail->setText($text);
+				$mail->send();
+				return true;
+			} catch (\Throwable $e) {
+				return false;
+			}
+		};
+		return $core;
+	}
+
+	private function proStatuses(): array {
+		$this->load->model('localisation/order_status');
+		$out = [];
+		foreach ($this->model_localisation_order_status->getOrderStatuses() as $s) {
+			$out[(string)$s['order_status_id']] = $s['name'];
+		}
+		return $out;
+	}
+
+	/** Licence panel and Pro settings under the core form. */
+	private function proSettingsHtml(): string {
+		\CcUpLicense::maybeVerify($this->config, $this->db);
+		return $this->proCore()->renderSettings([
+			'endpoint'  => $this->link('pro'),
+			'shipments' => $this->link('shipments'),
+			'cron'      => '',
+			'statuses'  => $this->proStatuses(),
+		]);
+	}
+
+	/** JSON endpoint of the Pro panel and the shipments page. */
+	public function pro(): void {
+		$core = $this->proCore();
+		if (!$this->user->hasPermission('modify', 'extension/ukrposhta/shipping/ukrposhta')) {
+			$this->jsonResponse(['ok' => false, 'message' => $core->t('e_permission')]);
+			return;
+		}
+		$post = [];
+		foreach ((array)$this->request->post as $k => $v) {
+			$post[$k] = is_scalar($v) ? html_entity_decode((string)$v, ENT_QUOTES, 'UTF-8') : '';
+		}
+		$this->jsonResponse($core->handle((string)($post['op'] ?? ''), $post));
+	}
+
+	/** Labels / form 103a as PDF. */
+	public function proPdf(): void {
+		$core = $this->proCore();
+		if (!$this->user->hasPermission('access', 'extension/ukrposhta/shipping/ukrposhta')) {
+			$this->response->setOutput($core->t('e_permission'));
+			return;
+		}
+		$r = $core->pdfResponse((string)($this->request->get['what'] ?? ''), (string)($this->request->get['ids'] ?? ''));
+		if (empty($r['ok'])) {
+			$this->response->addHeader('Content-Type: text/html; charset=utf-8');
+			$this->response->setOutput('<p style="font:16px sans-serif;margin:24px">' . htmlspecialchars((string)$r['message'], ENT_QUOTES, 'UTF-8') . '</p>');
+			return;
+		}
+		$this->response->addHeader('Content-Type: application/pdf');
+		$this->response->addHeader('Content-Disposition: inline; filename="ukrposhta-' . date('Ymd-His') . '.pdf"');
+		$this->response->setOutput($r['pdf']);
+	}
+
+	/** Shipments page: every Ukrposhta order with its shipment, bulk actions. */
+	public function shipments(): void {
+		$this->load->language('extension/ukrposhta/shipping/ukrposhta');
+		\CcUpLicense::maybeVerify($this->config, $this->db);
+		$core  = $this->proCore();
+		$title = $core->t('sh_title');
+		$this->document->setTitle($title);
+		$data['heading_title'] = $title;
+		$data['breadcrumbs']   = [
+			['text' => $this->language->get('text_home'), 'href' => $this->url->link('common/dashboard', 'user_token=' . $this->session->data['user_token'])],
+			['text' => $this->language->get('heading_title'), 'href' => $this->url->link('extension/ukrposhta/shipping/ukrposhta', 'user_token=' . $this->session->data['user_token'])],
+			['text' => $title, 'href' => $this->url->link('extension/ukrposhta/shipping/ukrposhta.shipments', 'user_token=' . $this->session->data['user_token'])],
+		];
+		$data['pro_html'] = $core->renderShipments([
+			'endpoint' => $this->link('pro'),
+			'pdf'      => $this->link('proPdf', '&what='),
+			'settings' => $this->link(''),
+			'order'    => html_entity_decode($this->url->link('sale/order.info', 'user_token=' . $this->session->data['user_token'] . '&order_id='), ENT_QUOTES, 'UTF-8'),
+			'page'     => $this->link('shipments', '&page='),
+		], (int)($this->request->get['page'] ?? 1));
+		$data['header']      = $this->load->controller('common/header');
+		$data['column_left'] = $this->load->controller('common/column_left');
+		$data['footer']      = $this->load->controller('common/footer');
+		$this->response->setOutput($this->load->view('extension/ukrposhta/shipping/ukrposhta_shipments', $data));
 	}
 }
