@@ -283,6 +283,16 @@ class Ukrposhta extends \Opencart\System\Engine\Controller {
 					$post[$sf] = \Opencart\System\Library\Ukrposhta\Crypto::encrypt(trim((string)$post[$sf]));
 				}
 			}
+			// Licence rows are written by the licence calls and the Pro settings by the Pro
+			// panel (with its own licence check), never by this form.
+			$fromPanel = \CcUpLicense::serverOwned();
+			foreach (array_keys(\CcUpPro::$fields) as $proKey) {
+				$fromPanel[] = $proKey;
+			}
+			$fromPanel[] = 'cron_key';
+			foreach ($fromPanel as $panelKey) {
+				unset($post[\CcUpLicense::PREFIX . $panelKey]);
+			}
 			$merged = array_merge($current, $post);
 			$this->model_setting_setting->editSetting('shipping_ukrposhta', $merged);
 			$json['success'] = $this->language->get('text_success');
