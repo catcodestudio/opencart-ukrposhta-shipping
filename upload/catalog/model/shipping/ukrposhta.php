@@ -3,6 +3,7 @@ namespace Opencart\Catalog\Model\Extension\Ukrposhta\Shipping;
 
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/client.php';
 require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/crypto.php';
+require_once DIR_EXTENSION . 'ukrposhta/system/library/ukrposhta/cache.php';
 
 class Ukrposhta extends \Opencart\System\Engine\Model {
 	public function getQuote(array $address): array {
@@ -33,6 +34,9 @@ class Ukrposhta extends \Opencart\System\Engine\Model {
 		$cost        = $defaultCost;
 
 		$bearer         = $this->secret('shipping_ukrposhta_bearer');
+		if (!$this->classifierReady($bearer)) {
+			return [];
+		}
 		$senderPostcode = (int)preg_replace('/\D/', '', (string)$this->config->get('shipping_ukrposhta_sender_postcode'));
 		$recipPostcode  = (int)preg_replace('/\D/', '', (string)($this->session->data['up_office_postindex'] ?? ''));
 
@@ -80,6 +84,30 @@ class Ukrposhta extends \Opencart\System\Engine\Model {
 			'sort_order' => $this->config->get('shipping_ukrposhta_sort_order'),
 			'error'      => false,
 		];
+	}
+
+	/**
+	 * Within Ukraine the buyer must pick a region, city and post office from the
+	 * Ukrposhta classifier. Without a working eCom Bearer that list is empty and
+	 * the order could never be placed, so no quote is offered. A failed lookup is
+	 * remembered for 10 minutes so the cart does not ask Ukrposhta every time.
+	 */
+	private function classifierReady(string $bearer): bool {
+		if ($bearer === '') {
+			return false;
+		}
+		if ($this->db->query("SELECT 1 FROM `" . DB_PREFIX . "up_regions` LIMIT 1")->num_rows) {
+			return true;
+		}
+		if ($this->cache->get('up_regions_fail')) {
+			return false;
+		}
+		$client = new \Opencart\System\Library\Ukrposhta\Client($bearer, '', (bool)$this->config->get('shipping_ukrposhta_sandbox'));
+		if (\Opencart\System\Library\Ukrposhta\Cache::syncRegions($this->db, $client)) {
+			return true;
+		}
+		$this->cache->set('up_regions_fail', 1, 600);
+		return false;
 	}
 
 	private function secret(string $key): string {

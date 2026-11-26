@@ -1,5 +1,8 @@
 # Ukrposhta Shipping — OpenCart 4.x
 
+## 1.3.2 — 2026-11-26
+- Without a working eCom Bearer (none set or rejected by Ukrposhta) the method is no longer offered within Ukraine: the buyer could not pick a post office and got stuck at checkout. It comes back by itself once the Bearer works.
+
 ## 1.3.1 — 2026-11-12
 - Saving the main settings form no longer touches the Pro settings; they are changed only on the Pro panel.
 
